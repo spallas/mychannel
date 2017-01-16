@@ -2,6 +2,9 @@
  * Created by spallas on 16/jan/2017
  */
 
+#ifndef _SERVER_H_ // avoid multiple file inclusion
+#define _SERVER_H_
+
 #include <stdio.h>
 #include <stdlib.h>
 #include <errno.h>
@@ -64,3 +67,5 @@ typedef struct ch_s {
 /*****************************+*************************************************
  *
  */
+
+ #endif
