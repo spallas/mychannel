@@ -10,6 +10,7 @@
 #include <errno.h>
 #include <string.h>
 #include <netinet/in.h>
+#include <sys/socket.hs>
 
 #define GENERIC_ERROR_HELPER(cond, errCode, msg) do {               \
         if (cond) {                                                 \
@@ -57,7 +58,6 @@ typedef struct user_s {
 
 // channel data structure
 typedef struct ch_s {
-    int    ch_socket;
     char   ch_name[CHNAME_SIZE];
     user_t ch_users[MAX_CH_USERS];
     int    num_users;
@@ -66,13 +66,10 @@ typedef struct ch_s {
 // functions prototypes:
 
 /*******************************************************************************
- *
+ * This function is called when a user creates a channel. The socket used to
+ * comunicate with the client identifies the owner of the channel, the only one
+ * that can terminate it.
  */
-int create_user();
-
-/*******************************************************************************
- *
- */
- int create_channel(int);
+int channel_main(int creator_sockfd);
 
  #endif

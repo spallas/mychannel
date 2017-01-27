@@ -2,18 +2,16 @@
  * Created by spallas on 26/jan/2017
  */
 
- #include "server.h"
+#include "server.h"
 
-#define SERVER_PORT 1995
+#define SERVER_PORT 8000
 #define MAX_PENDING_REQ 3
 
-typedef struct conn_thread_args_s {
-    int socket;
-} conn_thread_args_t;
 
-void* manage_new_connection(void* args){
+void manage_new_connection(int sockfd){
     // ask client whether he wants to join or create a channel
-    int sockfd = args->socket;
+    // If the user is joining a channel redirect to the appropriate process
+    // else this process will be dedicated to the new channel.
 
     char command[COMMAND_SIZE];
 
@@ -24,17 +22,25 @@ void* manage_new_connection(void* args){
         char channel_name[CHNAME_SIZE];
         read(sockfd, channel_name, CHNAME_SIZE);
         ch_t channel = find_ch_byname(channel_name);
-        // send channel socket so that client communicates in that channel?
+        // send channel socket descriptor
+        // so that client communicates to the channel process
+        // the steps to take are:
+        // - open AF_UNIX socket: the path is equal to the name of the channel
+        // note: the channel process main routine repeatedly listens to
+        // the socket waiting for new users. On different threads it will
+        // listen for users messages.
+        // - send message over socket to process. Use fdshare utilities.
+
     } else if (strcmp(command, ":create") == 0) {
-        create_channel(sockfd);
-        // what to do in create channel?
+        channel_main(sockfd);
+        // what to do in channel process?
     }
 }
 
 
 int main(int argc, char const *argv[]) {
 
-    // the server listens on port 1995
+    // the server listens on port 8000
     unsigned short server_port = htons(SERVER_PORT);
 
     // initialize the listening socket, use default protocol
@@ -61,21 +67,18 @@ int main(int argc, char const *argv[]) {
     int client_desc;
 
     // in this infinite loop accept new connections
-    // upon a connection launch a thread to interpret what the client wants to
+    // upon a connection launch a process to interpret what the client wants to
     // do between creating a channel and joining a channel
     while(1) {
 
         client_desc = accept(server_desc,
                              (struct sockaddr*) &client_addr,
                              &client_addr_len);
-        conn_thread_args_t* args = malloc(sizeof(conn_thread_args_t));
-        args->socket  = client_desc;
 
-        pthread_t conn_thread;
-        pthread_create(&conn_thread, NULL, manage_new_connection, args);
-
-        pthread_detach(conn_thread);
-
+        if(fork() == 0) {
+            manage_new_connection(client_desc);
+            break;
+        }
      }
 
      exit(EXIT_SUCCESS);
