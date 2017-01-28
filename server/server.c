@@ -32,7 +32,8 @@ void* broadcast_routine(void* args) {
     int ch_indx= (int) args;
     while(1){
         msg_t* msg = dequeue(ch_indx);
-        for(int i=0; i<channels[ch_indx]->num_users; i++){
+        for(int i=0; i<MAX_CH_USERS; i++){
+            if(channels[ch_indx]->ch_users[i]==NULL) continue;
             if(strcmp(channels[ch_indx]->ch_users[i].nickname, msg->nickname))
                 continue;
             int total_size = NICKNAME_SIZE + MSG_SIZE + 4;
