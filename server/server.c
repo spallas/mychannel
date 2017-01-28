@@ -29,8 +29,22 @@ int add_user(user_t user, int ch_indx) {
 
 
 void* broadcast_routine(void* args) {
-    int ch_ch_indx= (int) args;
-
+    int ch_indx= (int) args;
+    while(1){
+        msg_t* msg = dequeue(ch_indx);
+        for(int i=0; i<channels[ch_indx]->num_users; i++){
+            if(strcmp(channels[ch_indx]->ch_users[i].nickname, msg->nickname))
+                continue;
+            int total_size = NICKNAME_SIZE + MSG_SIZE + 4;
+            char buff[total_size] = {0};
+            buff = strcat(buff, msg->nickname);
+            buff = strcat(buff, ": ");
+            buff = strcat(buff, msg->data);
+            buff = strcat(buff, "|");
+            send(channels[ch_indx]->ch_users[i].socket, buff, total_size, 0);
+            free(msg);
+        }
+    }
     return NULL;
 }
 
