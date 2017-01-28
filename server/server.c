@@ -66,6 +66,16 @@ int find_ch_byname(char* name) {
 
 void enqueue(msg_t* message, int ch_indx) {
 
+    sem_wait(empty_sem, ch_indx);
+    mutex_lock(write_mutex, ch_indx);
+
+    int write_index = channels[ch_indx]->write_index;
+    channels[ch_indx]->ch_queue[write_index];
+    channels[ch_indx]->write_index = (write_index + 1) % QUEUE_SIZE;
+
+    mutex_unlock(write_mutex, ch_indx);
+    sem_post(fill_sem, ch_indx);
+
 
 }
 
@@ -137,6 +147,7 @@ int main(int argc, char const *argv[]) {
     // initialize semaphores
     add_user_mutex = mutex_init(MAX_CHANNELS);
     init_channel_mutex = mutex_init(1);
+    write_mutex = mutex_init(MAX_CHANNELS);
     fill_sem = sem_init(0, MAX_CHANNELS);
     empty_sem = sem_init(QUEUE_SIZE, MAX_CHANNELS);
 
