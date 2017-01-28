@@ -34,6 +34,7 @@
 #define MSG_DELIMITER_CHAR  '|'
 #define COMMAND_CHAR        ':'
 #define COMMAND_SIZE        16
+#define QUEUE_SIZE          256
 // each command starts with :
 #define JOIN_COMMAND        "join"   // join <?> channel
 #define LEAVE_COMMAND       "leave"  // leave a channel but stay in the program
@@ -60,6 +61,9 @@ typedef struct ch_s {
     char   ch_name[CHNAME_SIZE];
     user_t ch_users[MAX_CH_USERS];
     int    num_users;
+    char   ch_queue[QUEUE_SIZE][MSG_SIZE + NICKNAME_SIZE + 2];
+    int read_index;
+    int write_index;
 } ch_t;
 
 // functions prototypes:
