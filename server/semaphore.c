@@ -5,8 +5,11 @@ int sem_init(int init_value, int n){
 	if ( id_sem == -1 ) printf("Errore nella chiamata semget");
 
 	union semun arg;
-	int arr[n] = {0};
-	arg.array = array;
+	int arr[n];
+	for (size_t i = 0; i < count; i++) {
+		arr[i] = init_value;
+	}
+	arg.array = arr;
 
 	int ret = semctl(id_sem, 0, SETALL, arg);
 	if(ret == -1) printf("Error initializing sem");
