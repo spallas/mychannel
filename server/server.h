@@ -65,7 +65,7 @@ typedef struct ch_s {
     char   ch_name[CHNAME_SIZE];
     user_t ch_users[MAX_CH_USERS];
     int    num_users;
-    char   ch_queue[QUEUE_SIZE][MSG_SIZE + NICKNAME_SIZE + 2];
+    msg_t*   ch_queue[QUEUE_SIZE];
     int read_index;
     int write_index;
 } ch_t;
