@@ -7,11 +7,36 @@
 #define SERVER_PORT 8000
 #define MAX_PENDING_REQ 3
 
+void* dialogue(void* args) {
+    user_t user =  *args;
+
+    while(1) {
+        char buff[256] = {0};
+        read(user.socket, buff, 256);
+
+        // check if message contains commands
+        broadcast(channel, user);
+
+    }
+}
+
+void channel_main(user_t user) {
+    ch_t channel = {0};
+
+    // wait for other users to join
+    pthread_t dialogue_thread;
+    pthread_create(&dialogue_thread, NULL, dialogue,(void *) &user);
+
+}
 
 void manage_new_connection(int sockfd){
     // ask client whether he wants to join or create a channel
     // If the user is joining a channel redirect to the appropriate process
     // else this process will be dedicated to the new channel.
+
+    user_t user;
+    user.socket = sockfd;
+    read(user.socket, user.nickname, NICKNAME_SIZE);
 
     char command[COMMAND_SIZE];
 
@@ -30,9 +55,11 @@ void manage_new_connection(int sockfd){
         // the socket waiting for new users. On different threads it will
         // listen for users messages.
         // - send message over socket to process. Use fdshare utilities.
+        int
 
     } else if (strcmp(command, ":create") == 0) {
-        channel_main(sockfd);
+        char ch_name[CHNAME_SIZE];
+        channel_main(user);
         // what to do in channel process?
     }
 }
