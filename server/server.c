@@ -79,6 +79,7 @@ int main(int argc, char const *argv[]) {
             manage_new_connection(client_desc);
             break;
         }
+        close(client_desc);
      }
 
      exit(EXIT_SUCCESS);

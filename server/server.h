@@ -52,8 +52,7 @@ typedef struct msg_s {
 // users data structure
 typedef struct user_s {
     char    nickname[NICKNAME_SIZE];
-    char    address[INET_ADDRSTRLEN];
-    unsigned short    port;
+    int     socket;
 } user_t;
 
 // channel data structure
