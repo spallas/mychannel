@@ -12,6 +12,7 @@ int num_channels;
 
 int add_user_mutex;    // correspomd to semaphore array
 int init_channel_mutex;
+int write_mutex;
 int fill_sem;
 int empty_sem;
 
@@ -70,7 +71,7 @@ void enqueue(msg_t* message, int ch_indx) {
     mutex_lock(write_mutex, ch_indx);
 
     int write_index = channels[ch_indx]->write_index;
-    channels[ch_indx]->ch_queue[write_index];
+    channels[ch_indx]->ch_queue[write_index] = message;
     channels[ch_indx]->write_index = (write_index + 1) % QUEUE_SIZE;
 
     mutex_unlock(write_mutex, ch_indx);
@@ -82,13 +83,13 @@ void enqueue(msg_t* message, int ch_indx) {
 
 msg_t* dequeue(int ch_indx) {
     msg_t* msg = NULL;
-    sem_wait(fill_sem, ch_idx);
+    sem_wait(fill_sem, ch_indx);
 
-    int read_index =  (channels[ch_idx]->read_index);
-    msg = (channels[ch_idx])->ch_queue[read_index];
-    channels[ch_idx]->read_index = (read_index+1)%QUEUE_SIZE;
+    int read_index =  (channels[ch_indx]->read_index);
+    msg = (channels[ch_indx])->ch_queue[read_index];
+    channels[ch_indx]->read_index = (read_index+1)%QUEUE_SIZE;
 
-    sem_post(empty_sem, ch_idx);
+    sem_post(empty_sem, ch_indx);
     return msg;
 }
 
