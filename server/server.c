@@ -7,61 +7,55 @@
 #define SERVER_PORT 8000
 #define MAX_PENDING_REQ 3
 
-void* dialogue(void* args) {
-    user_t user =  *args;
+ch_t channels[MAX_CHANNELS];
+int num_channels;
+
+void* dialogue(user_t* user, ch_t* channel) {
 
     while(1) {
-        char buff[256] = {0};
-        read(user.socket, buff, 256);
+        char msg[256] = {0};
+        read(user.socket, msg, 256);
 
         // check if message contains commands
-        broadcast(channel, user);
+        // broadcast(channel, user, buff);
+        enqueue(channel->queue, user->nickname, msg);
 
     }
 }
 
-void channel_main(user_t user) {
-    ch_t channel = {0};
 
-    // wait for other users to join
-    pthread_t dialogue_thread;
-    pthread_create(&dialogue_thread, NULL, dialogue,(void *) &user);
-
-}
-
-void manage_new_connection(int sockfd){
-    // ask client whether he wants to join or create a channel
-    // If the user is joining a channel redirect to the appropriate process
-    // else this process will be dedicated to the new channel.
+void* user_main(void* args) {
 
     user_t user;
-    user.socket = sockfd;
+    user.socket = (int) args;
+
     read(user.socket, user.nickname, NICKNAME_SIZE);
 
     char command[COMMAND_SIZE];
-
     int command_len;
+
     command_len = read(sockfd, command, COMMAND_SIZE);
     command[command_len-1] = '\0';
     if (strcmp(command, ":join") == 0) {
         char channel_name[CHNAME_SIZE];
         read(sockfd, channel_name, CHNAME_SIZE);
-        ch_t channel = find_ch_byname(channel_name);
-        // send channel socket descriptor
-        // so that client communicates to the channel process
-        // the steps to take are:
-        // - open AF_UNIX socket: the path is equal to the name of the channel
-        // note: the channel process main routine repeatedly listens to
-        // the socket waiting for new users. On different threads it will
-        // listen for users messages.
-        // - send message over socket to process. Use fdshare utilities.
-        int
+        ch_t* channel = find_ch_byname(channel_name);
+        channel->ch_users[channel->num_users] = user;  //TODO: check dimension
+        channel->num_users++;
+
+        dialogue(&user, &channel);
+
 
     } else if (strcmp(command, ":create") == 0) {
-        char ch_name[CHNAME_SIZE];
-        channel_main(user);
-        // what to do in channel process?
+        ch_t channel = {0};
+        read(user.socket, channel.ch_name, CHNAME_SIZE);
+        channel->ch_users[channel->num_users] = user;  //TODO: chek dimension
+        channel->num_users++;
+
+        dialogue(&user, &channel);
+
     }
+
 }
 
 
@@ -102,11 +96,8 @@ int main(int argc, char const *argv[]) {
                              (struct sockaddr*) &client_addr,
                              &client_addr_len);
 
-        if(fork() == 0) {
-            manage_new_connection(client_desc);
-            break;
-        }
-        close(client_desc);
+        pthread_t user_thread;
+        pthread_create(&user_thread, NULL, user_main, (void*) client_desc);
      }
 
      exit(EXIT_SUCCESS);
