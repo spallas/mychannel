@@ -5,9 +5,10 @@
 #ifndef _SERVER_H_ // avoid multiple file inclusion
 #define _SERVER_H_
 
+#include <errno.h>
+#include <pthread.h>
 #include <stdio.h>
 #include <stdlib.h>
-#include <errno.h>
 #include <string.h>
 #include <netinet/in.h>
 #include <sys/socket.hs>
@@ -47,7 +48,7 @@
 // messages data structure
 typedef struct msg_s {
     char    nickname[NICKNAME_SIZE];
-    char    msg[MSG_SIZE];
+    char    data[MSG_SIZE];
 } msg_t;
 
 // users data structure

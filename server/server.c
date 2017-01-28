@@ -7,18 +7,69 @@
 #define SERVER_PORT 8000
 #define MAX_PENDING_REQ 3
 
-ch_t channels[MAX_CHANNELS];
+ch_t* channels[MAX_CHANNELS];
 int num_channels;
 
-void* dialogue(user_t* user, ch_t* channel) {
+int add_user(ch_t* channel, user_t user) {
+    /**** CS ****/
+    channel->ch_users[channel->num_users] = user;  //TODO: chek dimension
+    channel->num_users++;
+    /**** CS ****/
+}
 
+
+ch_t* init_channel(char* channel_name) {
+
+    /**** CS ****/
+    int i = num_channels;
+    channels[i] = malloc(sizeof(ch_t));
+    channels[i]->name = channel_name;
+    channels[i]->num_users = 0;
+    channels[i]->read_index = 0;
+    channels[i]->write_index = 0;
+    num_channels++;
+    /**** CS ****/
+    pthread_t thread;
+    pthread_create(&thread, NULL, broadcast_routine, (void*) &channels[i]);
+    return channels[i];
+}
+
+
+ch_t* find_ch_byname(char* name) {
+    int i;
+    for (i = 0; i < MAX_CHANNELS; i++) {
+        if(channels[i] == NULL) return NULL;
+        if(strcmp(channels[i]->ch_name, name) == 0) return channels[i];
+    }
+}
+
+
+void enqueue(ch_t* channel, msg_t* message) {
+
+
+}
+
+
+msg_t* dequeue(ch_t* channel) {
+
+
+}
+
+
+void* broadcast_routine(void* args) {
+    ch_t* channel = (ch_t*) args;
+}
+
+
+void* dialogue(user_t* user, ch_t* channel) {
     while(1) {
-        char msg[256] = {0};
-        read(user.socket, msg, 256);
+        msg_t message;
+        message.nickname = user->nickname;
+        read(user->socket, message.data, MSG_SIZE);
 
         // check if message contains commands
-        // broadcast(channel, user, buff);
-        enqueue(channel->queue, user->nickname, msg);
+
+        enqueue(channel, msg);
 
     }
 }
@@ -36,23 +87,27 @@ void* user_main(void* args) {
 
     command_len = read(sockfd, command, COMMAND_SIZE);
     command[command_len-1] = '\0';
+
     if (strcmp(command, ":join") == 0) {
         char channel_name[CHNAME_SIZE];
-        read(sockfd, channel_name, CHNAME_SIZE);
+        read(user.socket, channel_name, CHNAME_SIZE);
         ch_t* channel = find_ch_byname(channel_name);
-        channel->ch_users[channel->num_users] = user;  //TODO: check dimension
-        channel->num_users++;
 
-        dialogue(&user, &channel);
+        add_user(channel, user);
+
+        dialogue(&user, channel);
 
 
     } else if (strcmp(command, ":create") == 0) {
-        ch_t channel = {0};
-        read(user.socket, channel.ch_name, CHNAME_SIZE);
-        channel->ch_users[channel->num_users] = user;  //TODO: chek dimension
-        channel->num_users++;
+        char channel_name[CHNAME_SIZE];
+        int len;
+        len = read(user.socket, channel_name, CHNAME_SIZE-1);
+        channel_name[len+1] = '\0';
 
-        dialogue(&user, &channel);
+        ch_t* channel = init_channel(channel_name);
+        add_user(channel, user);
+
+        dialogue(&user, channel);
 
     }
 
@@ -88,7 +143,7 @@ int main(int argc, char const *argv[]) {
     int client_desc;
 
     // in this infinite loop accept new connections
-    // upon a connection launch a process to interpret what the client wants to
+    // upon a connection launch a thread to interpret what the client wants to
     // do between creating a channel and joining a channel
     while(1) {
 
