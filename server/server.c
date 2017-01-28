@@ -16,6 +16,7 @@ int write_mutex;
 int fill_sem;
 int empty_sem;
 
+// TODO: manage users leaving the channel
 int add_user(user_t user, int ch_indx) {
     if(ch_indx >= MAX_CHANNELS) return -1;
     if(channels[ch_indx]->num_users >= MAX_CH_USERS) return -1;
@@ -28,6 +29,35 @@ int add_user(user_t user, int ch_indx) {
 }
 
 
+void enqueue(msg_t* message, int ch_indx) {
+
+    sem_wait(empty_sem, ch_indx);
+    mutex_lock(write_mutex, ch_indx);
+
+    int write_index = channels[ch_indx]->write_index;
+    channels[ch_indx]->ch_queue[write_index] = message;
+    channels[ch_indx]->write_index = (write_index + 1) % QUEUE_SIZE;
+
+    mutex_unlock(write_mutex, ch_indx);
+    sem_post(fill_sem, ch_indx);
+
+
+}
+
+
+msg_t* dequeue(int ch_indx) {
+    msg_t* msg = NULL;
+    sem_wait(fill_sem, ch_indx);
+
+    int read_index =  (channels[ch_indx]->read_index);
+    msg = (channels[ch_indx])->ch_queue[read_index];
+    channels[ch_indx]->read_index = (read_index+1)%QUEUE_SIZE;
+
+    sem_post(empty_sem, ch_indx);
+    return msg;
+}
+
+
 void* broadcast_routine(void* args) {
     int ch_indx= (int) args;
     while(1){
@@ -37,11 +67,11 @@ void* broadcast_routine(void* args) {
             if(strcmp(channels[ch_indx]->ch_users[i].nickname, msg->nickname))
                 continue;
             int total_size = NICKNAME_SIZE + MSG_SIZE + 4;
-            char buff[total_size] = {0};
-            buff = strcat(buff, msg->nickname);
-            buff = strcat(buff, ": ");
-            buff = strcat(buff, msg->data);
-            buff = strcat(buff, "|");
+            char buff[NICKNAME_SIZE + MSG_SIZE + 4] = {0};
+            strcat(buff, msg->nickname);
+            strcat(buff, ": ");
+            strcat(buff, msg->data);
+            strcat(buff, "|");
             send(channels[ch_indx]->ch_users[i].socket, buff, total_size, 0);
             free(msg);
         }
@@ -77,35 +107,6 @@ int find_ch_byname(char* name) {
         if(strcmp(channels[i]->ch_name, name) == 0) return i;
     }
     return -1;
-}
-
-
-void enqueue(msg_t* message, int ch_indx) {
-
-    sem_wait(empty_sem, ch_indx);
-    mutex_lock(write_mutex, ch_indx);
-
-    int write_index = channels[ch_indx]->write_index;
-    channels[ch_indx]->ch_queue[write_index] = message;
-    channels[ch_indx]->write_index = (write_index + 1) % QUEUE_SIZE;
-
-    mutex_unlock(write_mutex, ch_indx);
-    sem_post(fill_sem, ch_indx);
-
-
-}
-
-
-msg_t* dequeue(int ch_indx) {
-    msg_t* msg = NULL;
-    sem_wait(fill_sem, ch_indx);
-
-    int read_index =  (channels[ch_indx]->read_index);
-    msg = (channels[ch_indx])->ch_queue[read_index];
-    channels[ch_indx]->read_index = (read_index+1)%QUEUE_SIZE;
-
-    sem_post(empty_sem, ch_indx);
-    return msg;
 }
 
 
