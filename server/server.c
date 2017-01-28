@@ -16,6 +16,7 @@ int write_mutex;
 int fill_sem;
 int empty_sem;
 
+// TODO: manage users leaving the channel
 int add_user(user_t user, int ch_indx) {
     if(ch_indx >= MAX_CHANNELS) return -1;
     if(channels[ch_indx]->num_users >= MAX_CH_USERS) return -1;
