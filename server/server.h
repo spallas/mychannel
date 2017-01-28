@@ -11,7 +11,10 @@
 #include <stdlib.h>
 #include <string.h>
 #include <netinet/in.h>
-#include <sys/socket.hs>
+#include <sys/socket.h>
+#include <unistd.h>
+
+#include "semaphore.h"
 
 #define GENERIC_ERROR_HELPER(cond, errCode, msg) do {               \
         if (cond) {                                                 \
@@ -69,14 +72,5 @@ typedef struct ch_s {
 
 // functions prototypes:
 
-/*******************************************************************************
- * This function is called when a user creates a channel. The socket used to
- * comunicate with the client identifies the owner of the channel, the only one
- * that can terminate it.
- */
-int channel_main(int creator_sockfd);
-ch_t find_ch_byname(char channel_name);
-void broadcast(ch_t channel, user_t user, char* message);
-void manage_new_connection(int sockfd);
 
  #endif

@@ -15,6 +15,14 @@ int add_user(ch_t* channel, user_t user) {
     channel->ch_users[channel->num_users] = user;  //TODO: chek dimension
     channel->num_users++;
     /**** CS ****/
+    return 0;
+}
+
+
+void* broadcast_routine(void* args) {
+    ch_t* channel = (ch_t*) args;
+
+    return NULL;
 }
 
 
@@ -23,7 +31,7 @@ ch_t* init_channel(char* channel_name) {
     /**** CS ****/
     int i = num_channels;
     channels[i] = malloc(sizeof(ch_t));
-    channels[i]->name = channel_name;
+    sprintf(channels[i]->ch_name, "%s", channel_name);
     channels[i]->num_users = 0;
     channels[i]->read_index = 0;
     channels[i]->write_index = 0;
@@ -41,6 +49,7 @@ ch_t* find_ch_byname(char* name) {
         if(channels[i] == NULL) return NULL;
         if(strcmp(channels[i]->ch_name, name) == 0) return channels[i];
     }
+    return NULL;
 }
 
 
@@ -52,26 +61,22 @@ void enqueue(ch_t* channel, msg_t* message) {
 
 msg_t* dequeue(ch_t* channel) {
 
-
-}
-
-
-void* broadcast_routine(void* args) {
-    ch_t* channel = (ch_t*) args;
+    return NULL;
 }
 
 
 void* dialogue(user_t* user, ch_t* channel) {
     while(1) {
-        msg_t message;
-        message.nickname = user->nickname;
-        read(user->socket, message.data, MSG_SIZE);
+        msg_t* message = malloc(sizeof(msg_t));
+        sprintf(message->nickname, "%s", user->nickname);
+        read(user->socket, message->data, MSG_SIZE);
 
         // check if message contains commands
 
-        enqueue(channel, msg);
+        enqueue(channel, message);
 
     }
+    return NULL;
 }
 
 
@@ -85,7 +90,7 @@ void* user_main(void* args) {
     char command[COMMAND_SIZE];
     int command_len;
 
-    command_len = read(sockfd, command, COMMAND_SIZE);
+    command_len = read(user.socket, command, COMMAND_SIZE);
     command[command_len-1] = '\0';
 
     if (strcmp(command, ":join") == 0) {
@@ -110,11 +115,13 @@ void* user_main(void* args) {
         dialogue(&user, channel);
 
     }
-
+    return NULL;
 }
 
 
 int main(int argc, char const *argv[]) {
+
+    // initialize semaphores
 
     // the server listens on port 8000
     unsigned short server_port = htons(SERVER_PORT);
@@ -137,7 +144,7 @@ int main(int argc, char const *argv[]) {
     // declare a variable to hold client address and its length
     // these will be filled by accept
     struct sockaddr_in client_addr;
-    int client_addr_len;
+    unsigned int client_addr_len;
 
     // declare variable for descriptor returned by accept
     int client_desc;

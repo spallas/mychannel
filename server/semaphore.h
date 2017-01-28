@@ -1,6 +1,7 @@
 #include <sys/sem.h>
 #include <sys/ipc.h>
 #include <sys/shm.h>
+#include <stdio.h>
 
 int sem_init(int init_value, int n);
 void sem_post(int semaphore, int index);
