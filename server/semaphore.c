@@ -35,11 +35,18 @@ void sem_post(int sem, int index){
 }
 
 
-int mutex_init(){
-	int mutex_id = semget(IPC_PRIVATE, 1, IPC_CREAT|IPC_EXCL|0666);
+int mutex_init(int n){
+	int mutex_id = semget(IPC_PRIVATE, n, IPC_CREAT|IPC_EXCL|0666);
 	if( mutex_id == -1) printf("Error initializing mutex");
 
-	int ret = semctl(mutex_id, 0, SETVAL, 1);
+	union semun arg;
+	unsigned short arr[n];
+	for (size_t i = 0; i < n; i++) {
+		arr[i] = init_value;
+	}
+	arg.array = arr;
+
+	int ret = semctl(mutex_id, 0, SETALL, arg);
 	if(ret == -1) printf("Error initializing mutex");
 
 	return mutex_id;
