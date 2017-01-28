@@ -52,18 +52,18 @@ int mutex_init(int n){
 	return mutex_id;
 }
 
-void mutex_lock(int mutex){
+void mutex_lock(int mutex, int index){
 	struct sembuf op;
-	op.sem_num = 0;
+	op.sem_num = index;
 	op.sem_op = -1;
 	op.sem_flg = 0;
 	int ret = semop(mutex, &op, 1);
 	if(ret == -1) printf("Error locking mutex");
 }
 
-void mutex_unlock(int mutex){
+void mutex_unlock(int mutex, int index){
 	struct sembuf op;
-	op.sem_num = 0;
+	op.sem_num = index;
 	op.sem_op = 1;
 	op.sem_flg = 0;
 	int ret = semop(mutex, &op, 1);
