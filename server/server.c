@@ -71,8 +71,15 @@ void enqueue(msg_t* message, int ch_indx) {
 
 
 msg_t* dequeue(int ch_indx) {
+    msg_t* msg = NULL;
+    sem_wait(fill_sem, ch_idx);
 
-    return NULL;
+    int read_index =  (channels[ch_idx]->read_index);
+    msg = (channels[ch_idx])->ch_queue[read_index];
+    channels[ch_idx]->read_index = (read_index+1)%QUEUE_SIZE;
+
+    sem_post(empty_sem, ch_idx);
+    return msg;
 }
 
 
