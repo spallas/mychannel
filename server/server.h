@@ -70,5 +70,8 @@ typedef struct ch_s {
  * that can terminate it.
  */
 int channel_main(int creator_sockfd);
+ch_t find_ch_byname(char channel_name);
+void broadcast(ch_t channel, user_t user, char* message);
+void manage_new_connection(int sockfd);
 
  #endif
