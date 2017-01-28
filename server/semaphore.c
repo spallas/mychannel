@@ -42,7 +42,7 @@ int mutex_init(int n){
 	union semun arg;
 	unsigned short arr[n];
 	for (size_t i = 0; i < n; i++) {
-		arr[i] = init_value;
+		arr[i] = 1;
 	}
 	arg.array = arr;
 

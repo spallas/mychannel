@@ -10,62 +10,71 @@
 ch_t* channels[MAX_CHANNELS];
 int num_channels;
 
-int add_user(ch_t* channel, user_t user) {
-    /**** CS ****/
-    channel->ch_users[channel->num_users] = user;  //TODO: chek dimension
-    channel->num_users++;
-    /**** CS ****/
+int add_user_mutex;    // correspomd to semaphore array
+int init_channel_mutex;
+
+int add_user(user_t user, int ch_indx) {
+    if(ch_indx >= MAX_CHANNELS) return -1;
+    if(channels[ch_indx]->num_users >= MAX_CH_USERS) return -1;
+
+    mutex_lock(add_user_mutex, ch_indx);
+    channels[ch_indx]->ch_users[channels[ch_indx]->num_users] = user;
+    channels[ch_indx]->num_users++;
+    mutex_unlock(add_user_mutex, ch_indx);
     return 0;
 }
 
 
 void* broadcast_routine(void* args) {
-    ch_t* channel = (ch_t*) args;
+    int ch_ch_indx= (int) args;
 
     return NULL;
 }
 
 
-ch_t* init_channel(char* channel_name) {
+int init_channel(char* channel_name) {
+    if(num_channels == MAX_CHANNELS) return -1;
 
-    /**** CS ****/
+    mutex_lock(init_channel_mutex, 0);
     int i = num_channels;
+    num_channels++;
+    mutex_unlock(init_channel_mutex, 0);
+
     channels[i] = malloc(sizeof(ch_t));
     sprintf(channels[i]->ch_name, "%s", channel_name);
     channels[i]->num_users = 0;
     channels[i]->read_index = 0;
     channels[i]->write_index = 0;
-    num_channels++;
-    /**** CS ****/
     pthread_t thread;
-    pthread_create(&thread, NULL, broadcast_routine, (void*) &channels[i]);
-    return channels[i];
+    pthread_create(&thread, NULL, broadcast_routine, (void*) i);
+    pthread_detach(thread);
+    return i;
 }
 
 
-ch_t* find_ch_byname(char* name) {
+int find_ch_byname(char* name) {
     int i;
     for (i = 0; i < MAX_CHANNELS; i++) {
-        if(channels[i] == NULL) return NULL;
-        if(strcmp(channels[i]->ch_name, name) == 0) return channels[i];
+        if(channels[i] == NULL) return -1;
+        if(strcmp(channels[i]->ch_name, name) == 0) return i;
     }
+    return -1;
+}
+
+
+void enqueue(msg_t* message, int ch_indx) {
+
+
+}
+
+
+msg_t* dequeue(int ch_indx) {
+
     return NULL;
 }
 
 
-void enqueue(ch_t* channel, msg_t* message) {
-
-
-}
-
-
-msg_t* dequeue(ch_t* channel) {
-
-    return NULL;
-}
-
-
-void* dialogue(user_t* user, ch_t* channel) {
+void* dialogue(user_t* user, int ch_indx) {
     while(1) {
         msg_t* message = malloc(sizeof(msg_t));
         sprintf(message->nickname, "%s", user->nickname);
@@ -73,7 +82,7 @@ void* dialogue(user_t* user, ch_t* channel) {
 
         // check if message contains commands
 
-        enqueue(channel, message);
+        enqueue(message, ch_indx);
 
     }
     return NULL;
@@ -96,25 +105,20 @@ void* user_main(void* args) {
     if (strcmp(command, ":join") == 0) {
         char channel_name[CHNAME_SIZE];
         read(user.socket, channel_name, CHNAME_SIZE);
-        ch_t* channel = find_ch_byname(channel_name);
-
-        add_user(channel, user);
-
-        dialogue(&user, channel);
-
+        int ch_indx = find_ch_byname(channel_name);
+        add_user(user, ch_indx);
+        dialogue(&user, ch_indx);
 
     } else if (strcmp(command, ":create") == 0) {
         char channel_name[CHNAME_SIZE];
         int len;
         len = read(user.socket, channel_name, CHNAME_SIZE-1);
         channel_name[len+1] = '\0';
-
-        ch_t* channel = init_channel(channel_name);
-        add_user(channel, user);
-
-        dialogue(&user, channel);
-
+        int ch_indx = init_channel(channel_name);
+        add_user(user, ch_indx);
+        dialogue(&user, ch_indx);
     }
+    
     return NULL;
 }
 
@@ -122,6 +126,8 @@ void* user_main(void* args) {
 int main(int argc, char const *argv[]) {
 
     // initialize semaphores
+    add_user_mutex = mutex_init(MAX_CHANNELS);
+    init_channel_mutex = mutex_init(1);
 
     // the server listens on port 8000
     unsigned short server_port = htons(SERVER_PORT);
@@ -160,6 +166,7 @@ int main(int argc, char const *argv[]) {
 
         pthread_t user_thread;
         pthread_create(&user_thread, NULL, user_main, (void*) client_desc);
+        pthread_detach(user_thread);
      }
 
      exit(EXIT_SUCCESS);
