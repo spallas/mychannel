@@ -12,6 +12,8 @@ int num_channels;
 
 int add_user_mutex;    // correspomd to semaphore array
 int init_channel_mutex;
+int fill_sem;
+int empty_sem;
 
 int add_user(user_t user, int ch_indx) {
     if(ch_indx >= MAX_CHANNELS) return -1;
@@ -118,7 +120,7 @@ void* user_main(void* args) {
         add_user(user, ch_indx);
         dialogue(&user, ch_indx);
     }
-    
+
     return NULL;
 }
 
@@ -128,6 +130,8 @@ int main(int argc, char const *argv[]) {
     // initialize semaphores
     add_user_mutex = mutex_init(MAX_CHANNELS);
     init_channel_mutex = mutex_init(1);
+    fill_sem = sem_init(0, MAX_CHANNELS);
+    empty_sem = sem_init(QUEUE_SIZE, MAX_CHANNELS);
 
     // the server listens on port 8000
     unsigned short server_port = htons(SERVER_PORT);
