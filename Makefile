@@ -3,14 +3,17 @@ LDFLAGS = -lpthread
 
 all: client server
 
-server: server/server.h server/server.c server/semaphore.h server/semaphore.c
-	$(CC) -c server/server.c -o server/server.o
-	$(CC) -c server/semaphore.c -o server/semaphore.o
-	$(CC) -o server/server server/server.o server/semaphore.o
+server: server/server.c shared/semaphore.c shared/protocol.c
+	$(CC) -c server/server.c    -o server/server.o
+	$(CC) -c shared/semaphore.c -o shared/semaphore.o
+	$(CC) -c shared/protocol.c  -o shared/protocol.o
+	$(CC) -o server/server server/server.o shared/semaphore.o shared/protocol.o $(LDFLAGS)
 
-client: client/client.c client/client.h
+client: client/client.c shared/protocol.c
 	$(CC) -c client/client.c -o client/client.o
-	$(CC) -o client/mychannel client/client.o
+	$(CC) -c shared/protocol.c -o shared/protocol.o
+	$(CC) -o client/mychannel client/client.o shared/protocol.o $(LDFLAGS)
 
+.PHONY: clean
 clean:
-	rm -f server/*.o client/*.o server/server client/mychannel
+	rm -f server/*.o client/*.o shared/*.o server/server client/mychannel
