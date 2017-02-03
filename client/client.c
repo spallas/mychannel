@@ -81,6 +81,7 @@ void* send_msg(void* args) {
         LOGi("Sending message to server...");
         readln(message, MSG_SIZE);
         send_stream(sockfd, message, MSG_SIZE);
+        memset(message, 0, MSG_SIZE);
     }
     pthread_exit(NULL);
 }
@@ -95,6 +96,7 @@ void* recv_msg(void* args) {
         LOGi("Received message from server: ");
         message[strlen(message)-1] = '\0';
         printf("%s\n", message);
+        memset(message, 0, MSG_SIZE);
     }
 
     pthread_exit(NULL);
