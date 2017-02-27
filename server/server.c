@@ -66,9 +66,11 @@ void* broadcast_routine(void* args) {
         LOGi("About to broadcast a message...");
         msg_t* msg = dequeue(ch_indx);
         for(int i=0; i<MAX_CH_USERS; i++){
+
             if(channels[ch_indx]->ch_users[i] == NULL) continue;
-            if(strcmp(channels[ch_indx]->ch_users[i]->nickname, msg->nickname))
+            if(strcmp(channels[ch_indx]->ch_users[i]->nickname, msg->nickname)==0)
                 continue;
+            //printf("%d\n", channels[ch_indx]->ch_users[i]->socket);
             int total_size = NICKNAME_SIZE + MSG_SIZE + 4;
             char buff[NICKNAME_SIZE + MSG_SIZE + 4] = {0};
             sprintf(buff, "%s: %s", msg->nickname, msg->data);
