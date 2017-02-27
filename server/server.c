@@ -25,7 +25,8 @@ int add_user(user_t user, int ch_indx) {
     mutex_lock(add_user_mutex, ch_indx);
     int usr_indx = channels[ch_indx]->num_users;
     channels[ch_indx]->ch_users[usr_indx] = malloc(sizeof(user_t));
-    *(channels[ch_indx]->ch_users[usr_indx]) = user;
+    sprintf(channels[ch_indx]->ch_users[usr_indx]->nickname, "%s",user.nickname);
+    channels[ch_indx]->ch_users[usr_indx]->socket   = user.socket;
     channels[ch_indx]->num_users++;
     mutex_unlock(add_user_mutex, ch_indx);
     return 0;
@@ -72,8 +73,8 @@ void* broadcast_routine(void* args) {
             char buff[NICKNAME_SIZE + MSG_SIZE + 4] = {0};
             sprintf(buff, "%s: %s", msg->nickname, msg->data);
             send_stream(channels[ch_indx]->ch_users[i]->socket, buff, total_size);
-            free(msg);
         }
+        free(msg);
     }
     pthread_exit(NULL);
 }
@@ -102,7 +103,6 @@ int init_channel(char* channel_name) {
 int find_ch_byname(char* name) {
     int i;
     for (i = 0; i < MAX_CHANNELS; i++) {
-        if(channels[i] == NULL) return -1;
         if(strcmp(channels[i]->ch_name, name) == 0) return i;
     }
     return -1;
@@ -114,6 +114,7 @@ int dialogue(user_t* user, int ch_indx) {
         msg_t* message = malloc(sizeof(msg_t));
         sprintf(message->nickname, "%s", user->nickname);
         LOGi("About to receive message from user...");
+        LOGi(user->nickname);
         recv_stream(user->socket, message->data, MSG_SIZE);
         // check if message contains commands like leave
 
@@ -140,6 +141,7 @@ void* user_main(void* args) {
         char channel_name[CHNAME_SIZE];
         recv_packet(user.socket, channel_name, CHNAME_SIZE);
         LOGi("Received channel name");
+        LOGi(channel_name);
         int ch_indx = find_ch_byname(channel_name);
         add_user(user, ch_indx);
         LOGi("New user joined");
@@ -148,6 +150,7 @@ void* user_main(void* args) {
         char channel_name[CHNAME_SIZE];
         recv_packet(user.socket, channel_name, CHNAME_SIZE);
         LOGi("Received new channel name");
+        LOGi(channel_name);
         int ch_indx = init_channel(channel_name);
         add_user(user, ch_indx);
         LOGi("Added new user");
