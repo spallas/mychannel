@@ -70,8 +70,10 @@ void mutex_unlock(int mutex, int index){
 	if(ret == -1) printf("Errore unlocking mutex");
 }
 
-void sem_close(int sem, int index){
+void sem_close(int sem){
+	int index = 0;
 	union semun arg = {0};
 	int ret = semctl(sem, index, IPC_RMID, arg);
-	if(ret == -1) printf("Error closing sem");
+	if(ret == -1) printf("Error closing sem: %s, %d, %d\n",
+						 strerror(errno), sem, index);
 }

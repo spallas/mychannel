@@ -9,6 +9,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <signal.h>
 #include <sys/socket.h>
 #include <unistd.h>
 
@@ -25,7 +26,14 @@
 #define ERROR_HELPER(ret, msg)         GENERIC_ERROR_HELPER((ret<0), errno, msg)
 #define PTHREAD_ERROR_HELPER(ret, msg) GENERIC_ERROR_HELPER((ret!=0), ret, msg)
 
-#define LOGi(info) do { fprintf(stderr, "[INFO]: %s\n", info); } while(0)
+#define LOGi(info) do { fprintf(stdout, "[INFO]: %s\n", info); } while(0)
+#define LOGe(info) do { fprintf(stderr, "[ERROR]: %s\n", info); } while(0)
+
+#ifdef DEBUG
+#define LOGd(info) do { fprintf(stderr, "[DEBUG]: %s\n", info); } while(0)
+#else
+#define LOGd(info)
+#endif
 
 // message config parameters
 #define MSG_SIZE            1024

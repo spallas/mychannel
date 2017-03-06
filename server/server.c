@@ -16,23 +16,39 @@ int write_mutex;
 int fill_sem;
 int empty_sem;
 
+sigset_t mask;
+
 
 // TODO: manage users leaving the channel
+/**
+ * Puts the user in the channel number ch_indx.
+ * The number of users in the channel grows.
+ * @param user: the user to insert in the channel
+ * @param ch_indx: the index of the chennel where to put the new user
+ * @return 0 on success, 1 if max number of user for the channel reached
+ */
 int add_user(user_t user, int ch_indx) {
     if(ch_indx >= MAX_CHANNELS) return -1;
     if(channels[ch_indx]->num_users >= MAX_CH_USERS) return -1;
 
     mutex_lock(add_user_mutex, ch_indx);
-    int usr_indx = channels[ch_indx]->num_users;
-    channels[ch_indx]->ch_users[usr_indx] = malloc(sizeof(user_t));
-    sprintf(channels[ch_indx]->ch_users[usr_indx]->nickname, "%s",user.nickname);
-    channels[ch_indx]->ch_users[usr_indx]->socket   = user.socket;
-    channels[ch_indx]->num_users++;
+    int usr_indx = channels[ch_indx]->num_users;  //CS
+    channels[ch_indx]->num_users++;               //CS
     mutex_unlock(add_user_mutex, ch_indx);
+
+    channels[ch_indx]->ch_users[usr_indx] = malloc(sizeof(user_t));
+    sprintf(channels[ch_indx]->ch_users[usr_indx]->nickname,"%s",user.nickname);
+    channels[ch_indx]->ch_users[usr_indx]->socket   = user.socket;
     return 0;
 }
 
-
+/**
+ * Add a message to the queue of messages that were sent to the ch_indx
+ * channel.
+ * @param message: the message to be enqueued
+ * @param ch_indx: the index in the global array of channels
+ *                 where to add message.
+ */
 void enqueue(msg_t* message, int ch_indx) {
     sem_wait(empty_sem, ch_indx);
     mutex_lock(write_mutex, ch_indx);
@@ -45,7 +61,13 @@ void enqueue(msg_t* message, int ch_indx) {
     sem_post(fill_sem, ch_indx);
 }
 
-
+/**
+ * Get a message from the queue of messages that were sent to the ch_indx
+ * channel.
+ * @param message: the message to be dequeued
+ * @param ch_indx: the index in the global array of channels
+ *                 where to get the last message.
+ */
 msg_t* dequeue(int ch_indx) {
     msg_t* msg = NULL;
     sem_wait(fill_sem, ch_indx);
@@ -58,12 +80,15 @@ msg_t* dequeue(int ch_indx) {
     return msg;
 }
 
-
+/**
+ * Get a message from the current queue and send it to all users;
+ * Function executed by thread ....
+ * @param args: pointer that casted to an int contains the channel index
+ */
 void* broadcast_routine(void* args) {
     int ch_indx= (int) args;
     LOGi("About to broadcast messages from broadcast_routine");
     while(1){
-        LOGi("About to broadcast a message...");
         msg_t* msg = dequeue(ch_indx);
         for(int i=0; i<MAX_CH_USERS; i++){
 
@@ -81,7 +106,10 @@ void* broadcast_routine(void* args) {
     pthread_exit(NULL);
 }
 
-
+/**
+ * Initialize new channel, allocate memory and set initial indexes
+ * @param channel_name: the name of the channel given by the creator
+ */
 int init_channel(char* channel_name) {
     if(num_channels == MAX_CHANNELS) return -1;
 
@@ -101,7 +129,11 @@ int init_channel(char* channel_name) {
     return i;
 }
 
-
+/**
+ * Get the channel index in the array given his name
+ * @param name: the name of the channel to find
+ * @return : the index of the channel, -1 if not found
+ */
 int find_ch_byname(char* name) {
     int i;
     for (i = 0; i < MAX_CHANNELS; i++) {
@@ -110,23 +142,29 @@ int find_ch_byname(char* name) {
     return -1;
 }
 
-
+/**
+ * Receive a message from a user and enqueue it in the given channel message
+ * queue.
+ * @param user : sender
+ * @param ch_indx : the channel the user is talking to
+ */
 int dialogue(user_t* user, int ch_indx) {
     while(1) {
         msg_t* message = malloc(sizeof(msg_t));
         sprintf(message->nickname, "%s", user->nickname);
-        LOGi("About to receive message from user...");
-        LOGi(user->nickname);
         recv_stream(user->socket, message->data, MSG_SIZE);
         // check if message contains commands like leave
-
+        // temporary
+        if(message->data == NULL) break;
         enqueue(message, ch_indx);
 
     }
     return 0;
 }
 
-
+/**
+ * Thread function....
+ */
 void* user_main(void* args) {
 
     user_t user;
@@ -161,10 +199,114 @@ void* user_main(void* args) {
     pthread_exit(NULL);
 }
 
+/**
+ * Handles terminating signals
+ */
+void smooth_exit(int unused1, siginfo_t *info, void *unused2) {
+    char signal_caught_msg[32];
+    sprintf(signal_caught_msg,
+            "Caught signal: sig%s",
+            sys_signame[info->si_signo]);
+    printf("\n");
+    LOGi(signal_caught_msg);
+    // alert all connected clients
+    for (int i=0; i<MAX_CHANNELS; i++) {
+        if(channels[i] != NULL) {
+            for (int j=0; j<MAX_CH_USERS; j++) {
+                if(channels[i]->ch_users[j] != NULL){
+                    int total_size = NICKNAME_SIZE + MSG_SIZE + 4;
+                    char buff[NICKNAME_SIZE + MSG_SIZE + 4] = {0};
+                    sprintf(buff, "%s: %s",
+                            "server message",
+                            "Sorry, Error occcurred in server");
+                    send_stream(channels[i]->ch_users[j]->socket,
+                                buff, total_size);
+                }
+            }
+        }
+    }
+    // free all structures
+    for (int i=0; i<MAX_CHANNELS; i++) {
+        if(channels[i] != NULL) {
+            for (int j=0; j<MAX_CH_USERS; j++) {
+                if(channels[i]->ch_users[j] != NULL)
+                    free(channels[i]->ch_users[j]);
+            }
+            for (int j=0; j<QUEUE_SIZE; j++) {
+                if(channels[i]->ch_queue[j] != NULL)
+                    free(channels[i]->ch_queue[j]);
+            }
+            free(channels[i]);
+        }
+    }
+    // close all descriptors
+
+    // close all semaphores
+    sem_close(add_user_mutex);
+    sem_close(write_mutex);
+    sem_close(fill_sem);
+    sem_close(empty_sem);
+    sem_close(init_channel_mutex);
+    // and?
+
+    exit(EXIT_FAILURE);
+}
+
+/**
+ * Handles SIGSEGV signal
+ */
+void sigsegv_exit(int unused1, siginfo_t *info, void *unused2) {
+    // alert all connected clients
+    // free all structures
+    // close all descriptors
+    // log info about memory
+    // and?
+}
+
+
+void handle_signal(int signal, void (*handler)(int, siginfo_t *, void *)) {
+    // use sigaction
+    struct sigaction act;
+    act.sa_sigaction = handler;
+    act.sa_flags = SA_SIGINFO;
+    int err = sigaction(signal, &act, NULL); // assign handler to signal
+    ERROR_HELPER(err, "Error in handle_signal: sigaction()");
+}
+
 
 int main(int argc, char const *argv[]) {
 
     LOGi("Server started");
+    printf("process: %d\n", getpid());
+
+    int err = 0;
+    // mask is a global variable
+    err |= sigemptyset(&mask);
+    err |= sigfillset(&mask);
+    err |= sigdelset(&mask, SIGTERM);
+    err |= sigdelset(&mask, SIGINT);
+    err |= sigdelset(&mask, SIGQUIT);
+    err |= sigdelset(&mask, SIGHUP);
+    err |= sigdelset(&mask, SIGPIPE);
+    err |= sigdelset(&mask, SIGSEGV);
+    err |= pthread_sigmask(SIG_BLOCK, &mask, NULL);
+
+    if(err != 0) {
+        fprintf(stderr, "%s: %s\n",
+                "Error in signal set initialization",  strerror(errno));
+        exit(EXIT_FAILURE);
+    }
+
+    //  ignoring SIGPIPE signal
+    if(signal(SIGPIPE, SIG_IGN) == SIG_ERR)
+        ERROR_HELPER(-1, "Error ignoring SIGPIPE");
+
+    handle_signal(SIGTERM,smooth_exit);
+    handle_signal(SIGINT, smooth_exit);
+    handle_signal(SIGQUIT,smooth_exit);
+    handle_signal(SIGHUP, smooth_exit);
+    handle_signal(SIGILL, smooth_exit);
+    handle_signal(SIGSEGV,sigsegv_exit);
 
     // initialize semaphores
     add_user_mutex     = mutex_init(MAX_CHANNELS);
