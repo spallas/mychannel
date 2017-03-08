@@ -10,7 +10,7 @@
 ch_t* channels[MAX_CHANNELS];
 int num_channels;
 
-int add_user_mutex;    // correspomd to semaphore array
+int add_user_mutex;    // correspond to semaphore array
 int init_channel_mutex;
 int write_mutex;
 int fill_sem;
@@ -30,16 +30,37 @@ sigset_t mask;
 int add_user(user_t user, int ch_indx) {
     if(ch_indx >= MAX_CHANNELS) return -1;
     if(channels[ch_indx]->num_users >= MAX_CH_USERS) return -1;
-
+    int i;
     mutex_lock(add_user_mutex, ch_indx);
-    int usr_indx = channels[ch_indx]->num_users;  //CS
-    channels[ch_indx]->num_users++;               //CS
-    mutex_unlock(add_user_mutex, ch_indx);
+    for (i=0; i<MAX_CH_USERS; i++) {
+        if(channels[ch_indx]->ch_users[i] == NULL) {
+            channels[ch_indx]->ch_users[i] = malloc(sizeof(user_t));
+            sprintf(channels[ch_indx]->ch_users[i]->nickname,
+                    "%s",user.nickname);
+            channels[ch_indx]->ch_users[i]->socket = user.socket;
+            channels[ch_indx]->num_users++;
+            mutex_unlock(add_user_mutex, ch_indx);
+            return 0;
+        }
+    }
+    ERROR_HELPER(-1, "Inconsistency in num_users");
+    return -1;
+}
 
-    channels[ch_indx]->ch_users[usr_indx] = malloc(sizeof(user_t));
-    sprintf(channels[ch_indx]->ch_users[usr_indx]->nickname,"%s",user.nickname);
-    channels[ch_indx]->ch_users[usr_indx]->socket   = user.socket;
-    return 0;
+int remove_user(user_t user, int ch_indx) {
+    int i;
+    for (i = 0; i<MAX_CH_USERS; i++) {
+        if(strcmp(user.nickname, channels[ch_indx]->ch_users[i]->nickname)==0){
+            free(channels[ch_indx]->ch_users[i]);
+            channels[ch_indx]->ch_users[i] = NULL;
+            LOGi("Removed user");
+            LOGe(user.nickname);
+            return 0;
+        }
+    }
+    LOGe(user.nickname);
+    LOGe("User not found");
+    return -1;
 }
 
 /**
@@ -114,20 +135,34 @@ int init_channel(char* channel_name) {
     if(num_channels == MAX_CHANNELS) return -1;
 
     mutex_lock(init_channel_mutex, 0);
-    int i = num_channels;
-    num_channels++;
-    mutex_unlock(init_channel_mutex, 0);
-
-    channels[i] = malloc(sizeof(ch_t));
-    sprintf(channels[i]->ch_name, "%s", channel_name);
-    channels[i]->num_users   = 0;
-    channels[i]->read_index  = 0;
-    channels[i]->write_index = 0;
-    pthread_t thread;
-    pthread_create(&thread, NULL, broadcast_routine, (void*) i);
-    pthread_detach(thread);
-    return i;
+    int i; // index of the first free channel
+    for (i = 0; i < MAX_CHANNELS; i++) {
+        if(channels[i] == NULL) { // free channel slot found
+            channels[i] = malloc(sizeof(ch_t));
+            if(channels[i] == NULL)
+                ERROR_HELPER(-1, "init_channel(): Error allocating memory");
+            sprintf(channels[i]->ch_name, "%s", channel_name);
+            channels[i]->num_users   = 0;
+            channels[i]->read_index  = 0;
+            channels[i]->write_index = 0;
+            num_channels++;
+            // unlock semaphore before creating thread and exiting the function
+            mutex_unlock(init_channel_mutex, 0);
+            pthread_t thread;
+            pthread_create(&thread, NULL, broadcast_routine, (void*) i);
+            pthread_detach(thread);
+            return i;
+        }
+    }
+    ERROR_HELPER(-1, "Incosistency in num_channels variable");
 }
+
+
+int delete_channel(int ch_indx) {
+
+    return 0;
+}
+
 
 /**
  * Get the channel index in the array given his name
@@ -155,6 +190,10 @@ int dialogue(user_t* user, int ch_indx) {
         recv_stream(user->socket, message->data, MSG_SIZE);
         // check if message contains commands like leave
         // temporary
+        if(strcmp(message->data, ":leave|") == 0) {
+            remove_user(*user, ch_indx);
+            break;
+        }
         if(message->data == NULL) break;
         enqueue(message, ch_indx);
 
@@ -186,6 +225,7 @@ void* user_main(void* args) {
         add_user(user, ch_indx);
         LOGi("New user joined");
         dialogue(&user, ch_indx);
+
     } else if (strcmp(command, ":create") == 0) {
         char channel_name[CHNAME_SIZE];
         recv_packet(user.socket, channel_name, CHNAME_SIZE);
@@ -196,6 +236,7 @@ void* user_main(void* args) {
         LOGi("Added new user");
         dialogue(&user, ch_indx);
     }
+
     pthread_exit(NULL);
 }
 
