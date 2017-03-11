@@ -8,8 +8,43 @@
 
 void* send_msg(void*);
 void* recv_msg(void*);
+void smooth_exit(int unused1, siginfo_t *info, void *unused2);
+void sigsegv_exit(int unused1, siginfo_t *info, void *unused2);
+void handle_signal(int signal, void (*handler)(int, siginfo_t *, void *));
+
+int sockfd;
+sigset_t mask;
 
 int main(int argc, char const *argv[]) {
+
+    int err = 0;
+    // mask is a global variable
+    err |= sigemptyset(&mask);
+    err |= sigfillset(&mask);
+    err |= sigdelset(&mask, SIGTERM);
+    err |= sigdelset(&mask, SIGINT);
+    err |= sigdelset(&mask, SIGQUIT);
+    err |= sigdelset(&mask, SIGHUP);
+    err |= sigdelset(&mask, SIGPIPE);
+    err |= sigdelset(&mask, SIGSEGV);
+    err |= pthread_sigmask(SIG_BLOCK, &mask, NULL);
+
+    if(err != 0) {
+        fprintf(stderr, "%s: %s\n",
+                "Error in signal set initialization",  strerror(errno));
+        exit(EXIT_FAILURE);
+    }
+
+    //  ignoring SIGPIPE signal
+    if(signal(SIGPIPE, SIG_IGN) == SIG_ERR)
+        ERROR_HELPER(-1, "Error ignoring SIGPIPE");
+
+    handle_signal(SIGTERM,smooth_exit);
+    handle_signal(SIGINT, smooth_exit);
+    handle_signal(SIGQUIT,smooth_exit);
+    handle_signal(SIGHUP, smooth_exit);
+    handle_signal(SIGILL, smooth_exit);
+    handle_signal(SIGSEGV,sigsegv_exit);
 
     char nickname[NICKNAME_SIZE];
     printf("Insert your nickname: ");
@@ -43,7 +78,7 @@ int main(int argc, char const *argv[]) {
 
     unsigned short server_port = htons(SERVER_PORT);
 
-    int sockfd = socket(AF_INET, SOCK_STREAM, 0);
+    sockfd = socket(AF_INET, SOCK_STREAM, 0);
     ERROR_HELPER(sockfd, "socket()");
 
     struct sockaddr_in server_addr = {0};
@@ -52,7 +87,7 @@ int main(int argc, char const *argv[]) {
     server_addr.sin_port   = server_port;
     inet_aton(SERVER_IP, &server_addr.sin_addr);
 
-    int err = connect(sockfd, (struct sockaddr*) &server_addr, addr_size);
+    err = connect(sockfd, (struct sockaddr*) &server_addr, addr_size);
     ERROR_HELPER(err, "connect()");
 
     send_packet(sockfd, nickname, NICKNAME_SIZE);
@@ -78,7 +113,7 @@ void* send_msg(void* args) {
     char message[MSG_SIZE];
 
     while(1) {
-        LOGi("Sending message to server...");
+        LOGd("Sending message to server...");
         readln(message, MSG_SIZE);
         send_stream(sockfd, message, MSG_SIZE);
         memset(message, 0, MSG_SIZE);
@@ -93,11 +128,39 @@ void* recv_msg(void* args) {
 
     while(1) {
         recv_stream(sockfd, message, MSG_SIZE);
-        LOGi("Received message from server: ");
+        LOGd("Received message from server: ");
         message[strlen(message)-1] = '\0';
         printf("%s\n", message);
         memset(message, 0, MSG_SIZE);
     }
 
     pthread_exit(NULL);
+}
+
+
+void handle_signal(int signal, void (*handler)(int, siginfo_t *, void *)){
+    // use sigaction
+    struct sigaction act;
+    act.sa_sigaction = handler;
+    act.sa_flags = SA_SIGINFO;
+    int err = sigaction(signal, &act, NULL); // assign handler to signal
+    ERROR_HELPER(err, "Error in handle_signal: sigaction()");
+}
+
+
+void smooth_exit(int unused1, siginfo_t *info, void *unused2) {
+    char* leave_msg = ":leave|";
+    send_stream(sockfd, leave_msg, MSG_SIZE);
+    int err = close(sockfd);
+    printf("Bye! C you soon!\n");
+    exit(0);
+}
+
+
+void sigsegv_exit(int unused1, siginfo_t *info, void *unused2) {
+    char* leave_msg = ":leave|";
+    send_stream(sockfd, leave_msg, MSG_SIZE);
+    int err = close(sockfd);
+    printf("Bye! C you soon!\n");
+    exit(0);
 }

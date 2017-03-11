@@ -19,7 +19,6 @@ int empty_sem;
 sigset_t mask;
 
 
-// TODO: manage users leaving the channel
 /**
  * Puts the user in the channel number ch_indx.
  * The number of users in the channel grows.
@@ -102,7 +101,7 @@ msg_t* dequeue(int ch_indx) {
 }
 
 /**
- * Get a message from the current queue and send it to all users;
+ * Get a message from the current queue and send it to all users in a channel;
  * Function executed by thread ....
  * @param args: pointer that casted to an int contains the channel index
  */
@@ -162,7 +161,6 @@ int delete_channel(int ch_indx) {
 
     return 0;
 }
-
 
 /**
  * Get the channel index in the array given his name
