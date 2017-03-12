@@ -1,10 +1,13 @@
 
 #include "client.h"
+//#include "semaphore.h"
 
 #define SERVER_PORT 8500
 #define SERVER_IP "127.0.0.1"
 // use "139.59.131.72" to try with a real server
 #define DEBUG 1
+
+pthread_t threads[2];
 
 void* send_msg(void*);
 void* recv_msg(void*);
@@ -14,6 +17,7 @@ void handle_signal(int signal, void (*handler)(int, siginfo_t *, void *));
 
 int sockfd;
 sigset_t mask;
+int sem;
 
 int main(int argc, char const *argv[]) {
 
@@ -27,6 +31,7 @@ int main(int argc, char const *argv[]) {
     err |= sigdelset(&mask, SIGHUP);
     err |= sigdelset(&mask, SIGPIPE);
     err |= sigdelset(&mask, SIGSEGV);
+    err |= sigdelset(&mask, SIGUSR1);
     err |= pthread_sigmask(SIG_BLOCK, &mask, NULL);
 
     if(err != 0) {
@@ -45,6 +50,8 @@ int main(int argc, char const *argv[]) {
     handle_signal(SIGHUP, smooth_exit);
     handle_signal(SIGILL, smooth_exit);
     handle_signal(SIGSEGV,sigsegv_exit);
+
+    sem = mutex_init(2);
 
     char nickname[NICKNAME_SIZE];
     printf("Insert your nickname: ");
@@ -75,6 +82,7 @@ int main(int argc, char const *argv[]) {
     else if(create)
         printf("What is the name of your new channel?\n> ");
     readln(channel, CHNAME_SIZE);
+    channel[strlen(channel)-1] = '\0';
 
     unsigned short server_port = htons(SERVER_PORT);
 
@@ -98,7 +106,6 @@ int main(int argc, char const *argv[]) {
     }
     send_packet(sockfd, channel, CHNAME_SIZE);
 
-    pthread_t threads[2];
     pthread_create(&threads[0], NULL, send_msg, (void*) sockfd);
     pthread_create(&threads[1], NULL, recv_msg, (void*) sockfd);
     pthread_join(threads[0], NULL);
@@ -113,10 +120,15 @@ void* send_msg(void* args) {
     char message[MSG_SIZE];
 
     while(1) {
-        LOGd("Sending message to server...");
+        mutex_lock(sem, 0);
+
         readln(message, MSG_SIZE);
+        if(message == "") continue;
         send_stream(sockfd, message, MSG_SIZE);
+        LOGd("Sent message to server...");
         memset(message, 0, MSG_SIZE);
+
+        mutex_unlock(sem, 0);
     }
     pthread_exit(NULL);
 }
@@ -127,11 +139,15 @@ void* recv_msg(void* args) {
     char message[MSG_SIZE];
 
     while(1) {
+        mutex_lock(sem, 1);
+
         recv_stream(sockfd, message, MSG_SIZE);
         LOGd("Received message from server: ");
         message[strlen(message)-1] = '\0';
         printf("%s\n", message);
         memset(message, 0, MSG_SIZE);
+
+        mutex_unlock(sem, 1);
     }
 
     pthread_exit(NULL);
@@ -149,6 +165,8 @@ void handle_signal(int signal, void (*handler)(int, siginfo_t *, void *)){
 
 
 void smooth_exit(int unused1, siginfo_t *info, void *unused2) {
+    pthread_cancel(threads[0]);
+    pthread_cancel(threads[1]);
     char* leave_msg = ":leave|";
     send_stream(sockfd, leave_msg, MSG_SIZE);
     int err = close(sockfd);
@@ -158,6 +176,8 @@ void smooth_exit(int unused1, siginfo_t *info, void *unused2) {
 
 
 void sigsegv_exit(int unused1, siginfo_t *info, void *unused2) {
+    pthread_cancel(threads[0]);
+    pthread_cancel(threads[1]);  
     char* leave_msg = ":leave|";
     send_stream(sockfd, leave_msg, MSG_SIZE);
     int err = close(sockfd);

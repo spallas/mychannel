@@ -192,7 +192,7 @@ int dialogue(user_t* user, int ch_indx) {
             remove_user(*user, ch_indx);
             break;
         }
-        if(message->data == NULL) break;
+        if(message->data == NULL || message->data == "") break;
         enqueue(message, ch_indx);
 
     }
@@ -258,6 +258,8 @@ void smooth_exit(int unused1, siginfo_t *info, void *unused2) {
                     sprintf(buff, "%s: %s",
                             "server message",
                             "Sorry, Error occcurred in server");
+                    LOGd("Alerting user:");
+                    LOGd(channels[i]->ch_users[j]->nickname);
                     send_stream(channels[i]->ch_users[j]->socket,
                                 buff, total_size);
                 }

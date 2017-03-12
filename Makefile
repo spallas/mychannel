@@ -22,10 +22,11 @@ server-debug: server/server.c shared/semaphore.c shared/protocol.c
 	$(CC-DEBUG) -c shared/protocol.c  -o shared/protocol.o
 	$(CC-DEBUG) -o server/server server/server.o shared/semaphore.o shared/protocol.o $(LDFLAGS)
 
-client-debug: client/client.c shared/protocol.c
+client-debug: client/client.c shared/semaphore.c shared/protocol.c
 	$(CC-DEBUG) -c client/client.c -o client/client.o
 	$(CC-DEBUG) -c shared/protocol.c -o shared/protocol.o
-	$(CC-DEBUG) -o client/mychannel client/client.o shared/protocol.o $(LDFLAGS)
+	$(CC-DEBUG) -c shared/semaphore.c -o shared/semaphore.o
+	$(CC-DEBUG) -o client/mychannel client/client.o shared/semaphore.o shared/protocol.o $(LDFLAGS)
 
 .PHONY: clean
 clean:
