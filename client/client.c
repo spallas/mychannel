@@ -1,6 +1,5 @@
 
 #include "client.h"
-//#include "semaphore.h"
 
 #define SERVER_PORT 8500
 #define SERVER_IP "127.0.0.1"
@@ -120,15 +119,11 @@ void* send_msg(void* args) {
     char message[MSG_SIZE];
 
     while(1) {
-        mutex_lock(sem, 0);
-
         readln(message, MSG_SIZE);
         if(message == "") continue;
         send_stream(sockfd, message, MSG_SIZE);
         LOGd("Sent message to server...");
         memset(message, 0, MSG_SIZE);
-
-        mutex_unlock(sem, 0);
     }
     pthread_exit(NULL);
 }
@@ -139,15 +134,11 @@ void* recv_msg(void* args) {
     char message[MSG_SIZE];
 
     while(1) {
-        mutex_lock(sem, 1);
-
         recv_stream(sockfd, message, MSG_SIZE);
         LOGd("Received message from server: ");
         message[strlen(message)-1] = '\0';
         printf("%s\n", message);
         memset(message, 0, MSG_SIZE);
-
-        mutex_unlock(sem, 1);
     }
 
     pthread_exit(NULL);
@@ -163,24 +154,44 @@ void handle_signal(int signal, void (*handler)(int, siginfo_t *, void *)){
     ERROR_HELPER(err, "Error in handle_signal: sigaction()");
 }
 
-
+/**
+ * Executed when one of the following signals occur: SIGTERM, SIGINT, SIGQUIT
+ * SIGHUP, SIGILL. It first stops the sending and listening threads using the
+ * library function pthread_cancel() which sends a terminating message to the
+ * threads; by default the message will be delivered in the cancellation point
+ * of the thread, which in this case are the calls to send() and recv().
+ * See pthreads(7) for info about cancellation functions.
+ */
 void smooth_exit(int unused1, siginfo_t *info, void *unused2) {
     pthread_cancel(threads[0]);
     pthread_cancel(threads[1]);
-    char* leave_msg = ":leave|";
-    send_stream(sockfd, leave_msg, MSG_SIZE);
-    int err = close(sockfd);
-    printf("Bye! C you soon!\n");
-    exit(0);
+    void* err0, err1;
+    pthread_join(threads[0], &err0);
+    pthread_join(threads[1], &err1);
+    if (err0 == PTHREAD_CANCELED && err1 == PTHREAD_CANCELED) {
+        char* leave_msg = ":leave|";
+        send_stream(sockfd, leave_msg, MSG_SIZE);
+        int err = close(sockfd);
+        printf("\nBye! C you soon!\n");
+        exit(0);
+    } else {
+        printf("This should not be called...\n");
+    }
 }
 
 
 void sigsegv_exit(int unused1, siginfo_t *info, void *unused2) {
     pthread_cancel(threads[0]);
-    pthread_cancel(threads[1]);  
-    char* leave_msg = ":leave|";
-    send_stream(sockfd, leave_msg, MSG_SIZE);
-    int err = close(sockfd);
-    printf("Bye! C you soon!\n");
-    exit(0);
-}
+    pthread_cancel(threads[1]);
+    void* err0, err1;
+    pthread_join(threads[0], &err0);
+    pthread_join(threads[1], &err1);
+    if (err0 == PTHREAD_CANCELED && err1 == PTHREAD_CANCELED) {
+        char* leave_msg = ":leave|";
+        send_stream(sockfd, leave_msg, MSG_SIZE);
+        int err = close(sockfd);
+        printf("Bye! C you soon!\n");
+        exit(0);
+    } else {
+        printf("This should not be called...\n");
+    }
