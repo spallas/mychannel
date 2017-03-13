@@ -50,8 +50,6 @@ int main(int argc, char const *argv[]) {
     handle_signal(SIGILL, smooth_exit);
     handle_signal(SIGSEGV,sigsegv_exit);
 
-    sem = mutex_init(2);
-
     char nickname[NICKNAME_SIZE];
     printf("Insert your nickname: ");
     readln(nickname, NICKNAME_SIZE);
@@ -110,21 +108,41 @@ int main(int argc, char const *argv[]) {
     pthread_join(threads[0], NULL);
     pthread_join(threads[1], NULL);
 
+    err = close(sockfd);
+    ERROR_HELPER(err, "Could not close socket in client:main");
+    printf("\nBye!\n");
     exit(EXIT_SUCCESS);
 }
 
 
 void* send_msg(void* args) {
     int sockfd = (int) args;
-    char message[MSG_SIZE];
+    char message[MSG_SIZE] = {0};
+
+    char leave_msg[COMMAND_SIZE];
+    sprintf(leave_msg, "%s%c", LEAVE_COMMAND, MSG_DELIMITER_CHAR);
+    char delete_msg[COMMAND_SIZE];
+    sprintf(delete_msg, "%s%c", DELETE_COMMAND, MSG_DELIMITER_CHAR);
 
     while(1) {
         readln(message, MSG_SIZE);
-        if(message == "") continue;
+        if(strcmp(message, "") == 0) continue;
+        if(strcmp(message, leave_msg) == 0) {
+            printf("Leaving the channel...\n");
+            pthread_cancel(threads[1]);
+            break;
+        } else if(strcmp(message, delete_msg) == 0) {
+            printf("Leaving the channel...\n");
+            printf("Telling MyChannel to delete the channel...\n");
+            pthread_cancel(threads[1]);
+            break;
+        }
         send_stream(sockfd, message, MSG_SIZE);
         LOGd("Sent message to server...");
         memset(message, 0, MSG_SIZE);
     }
+    send_stream(sockfd, leave_msg, COMMAND_SIZE);
+    LOGd("Sent message to server...");
     pthread_exit(NULL);
 }
 
@@ -134,7 +152,13 @@ void* recv_msg(void* args) {
     char message[MSG_SIZE];
 
     while(1) {
-        recv_stream(sockfd, message, MSG_SIZE);
+        int ret = recv_stream(sockfd, message, MSG_SIZE);
+        if(ret == 0) {
+            printf("Something is not online\n");
+            printf("Exiting...\n");
+            pthread_cancel(threads[0]);
+            pthread_exit(NULL);
+        }
         LOGd("Received message from server: ");
         message[strlen(message)-1] = '\0';
         printf("%s\n", message);
@@ -165,33 +189,27 @@ void handle_signal(int signal, void (*handler)(int, siginfo_t *, void *)){
 void smooth_exit(int unused1, siginfo_t *info, void *unused2) {
     pthread_cancel(threads[0]);
     pthread_cancel(threads[1]);
-    void* err0, err1;
-    pthread_join(threads[0], &err0);
-    pthread_join(threads[1], &err1);
-    if (err0 == PTHREAD_CANCELED && err1 == PTHREAD_CANCELED) {
-        char* leave_msg = ":leave|";
-        send_stream(sockfd, leave_msg, MSG_SIZE);
-        int err = close(sockfd);
-        printf("\nBye! C you soon!\n");
-        exit(0);
-    } else {
-        printf("This should not be called...\n");
-    }
+    pthread_join(threads[0], NULL);
+    pthread_join(threads[1], NULL);
+    char leave_msg[COMMAND_SIZE];
+    sprintf(leave_msg, "%s%c", LEAVE_COMMAND, MSG_DELIMITER_CHAR);
+    send_stream(sockfd, leave_msg, MSG_SIZE);
+    int err = close(sockfd);
+    ERROR_HELPER(err, "Could not close socket in client:smooth_exit");
+    printf("\nBye! C you soon!\n");
+    exit(0);
 }
 
 
 void sigsegv_exit(int unused1, siginfo_t *info, void *unused2) {
     pthread_cancel(threads[0]);
     pthread_cancel(threads[1]);
-    void* err0, err1;
-    pthread_join(threads[0], &err0);
-    pthread_join(threads[1], &err1);
-    if (err0 == PTHREAD_CANCELED && err1 == PTHREAD_CANCELED) {
-        char* leave_msg = ":leave|";
-        send_stream(sockfd, leave_msg, MSG_SIZE);
-        int err = close(sockfd);
-        printf("Bye! C you soon!\n");
-        exit(0);
-    } else {
-        printf("This should not be called...\n");
-    }
+    pthread_join(threads[0], NULL);
+    pthread_join(threads[1], NULL);
+    char* leave_msg = LEAVE_COMMAND;
+    send_stream(sockfd, leave_msg, MSG_SIZE);
+    int err = close(sockfd);
+    ERROR_HELPER(err, "Could not close socket in client:sigsegv_exit");
+    printf("\nBye! C you soon!\n");
+    exit(0);
+}

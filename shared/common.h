@@ -51,6 +51,7 @@
 #define QUIT_COMMAND        ":quit"   // performs leave & quit
 #define LIST_COMMAND        ":list"   // list channel users
 #define CREATE_COMMAND      ":create" // creaete new channel
+#define DELETE_COMMAND      ":delete" // deletes a channel
 #define STATS_COMMAND       ":stats"
 #define HELP_COMMAND        ":help"
 

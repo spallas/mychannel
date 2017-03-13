@@ -7,7 +7,7 @@
 #define SERVER_PORT 8500
 #define MAX_PENDING_REQ 3
 
-ch_t* channels[MAX_CHANNELS];
+ch_t* channels[MAX_CHANNELS] = {0};
 int num_channels;
 
 int add_user_mutex;    // correspond to semaphore array
@@ -26,17 +26,14 @@ sigset_t mask;
  * @param ch_indx: the index of the chennel where to put the new user
  * @return 0 on success, 1 if max number of user for the channel reached
  */
-int add_user(user_t user, int ch_indx) {
+int add_user(user_t* user, int ch_indx) {
     if(ch_indx >= MAX_CHANNELS) return -1;
     if(channels[ch_indx]->num_users >= MAX_CH_USERS) return -1;
     int i;
     mutex_lock(add_user_mutex, ch_indx);
     for (i=0; i<MAX_CH_USERS; i++) {
         if(channels[ch_indx]->ch_users[i] == NULL) {
-            channels[ch_indx]->ch_users[i] = malloc(sizeof(user_t));
-            sprintf(channels[ch_indx]->ch_users[i]->nickname,
-                    "%s",user.nickname);
-            channels[ch_indx]->ch_users[i]->socket = user.socket;
+            channels[ch_indx]->ch_users[i] = user;
             channels[ch_indx]->num_users++;
             mutex_unlock(add_user_mutex, ch_indx);
             return 0;
@@ -49,8 +46,8 @@ int add_user(user_t user, int ch_indx) {
 int remove_user(user_t user, int ch_indx) {
     int i;
     for (i = 0; i<MAX_CH_USERS; i++) {
-        if(strcmp(user.nickname, channels[ch_indx]->ch_users[i]->nickname)==0){
-            free(channels[ch_indx]->ch_users[i]);
+        if(strcmp(user.nickname, channels[ch_indx]->ch_users[i]->nickname)==0) {
+            // TODO: terminate user's thread
             channels[ch_indx]->ch_users[i] = NULL;
             LOGi("Removed user");
             LOGe(user.nickname);
@@ -111,7 +108,6 @@ void* broadcast_routine(void* args) {
     while(1){
         msg_t* msg = dequeue(ch_indx);
         for(int i=0; i<MAX_CH_USERS; i++){
-
             if(channels[ch_indx]->ch_users[i] == NULL) continue;
             if(strcmp(channels[ch_indx]->ch_users[i]->nickname, msg->nickname)==0)
                 continue;
@@ -137,7 +133,7 @@ int init_channel(char* channel_name) {
     int i; // index of the first free channel
     for (i = 0; i < MAX_CHANNELS; i++) {
         if(channels[i] == NULL) { // free channel slot found
-            channels[i] = malloc(sizeof(ch_t));
+            channels[i] = calloc(1, sizeof(ch_t));
             if(channels[i] == NULL)
                 ERROR_HELPER(-1, "init_channel(): Error allocating memory");
             sprintf(channels[i]->ch_name, "%s", channel_name);
@@ -158,7 +154,15 @@ int init_channel(char* channel_name) {
 
 
 int delete_channel(int ch_indx) {
-
+    int i = ch_indx;
+    msg_t alert_msg;
+    sprintf(alert_msg.nickname, "%s", "MyChannel");
+    sprintf(alert_msg.data, "%s", "Sorry, Error occcurred in server");
+    if(channels[i] != NULL) {
+        enqueue(&alert_msg, i);
+        sleep(1);
+        free(channels[i]);
+    }
     return 0;
 }
 
@@ -182,17 +186,23 @@ int find_ch_byname(char* name) {
  * @param ch_indx : the channel the user is talking to
  */
 int dialogue(user_t* user, int ch_indx) {
+    char leave_msg[COMMAND_SIZE];
+    sprintf(leave_msg, "%s%c", LEAVE_COMMAND, MSG_DELIMITER_CHAR);
+    char delete_msg[COMMAND_SIZE];
+    sprintf(delete_msg, "%s%c", DELETE_COMMAND, MSG_DELIMITER_CHAR);
     while(1) {
         msg_t* message = malloc(sizeof(msg_t));
         sprintf(message->nickname, "%s", user->nickname);
         recv_stream(user->socket, message->data, MSG_SIZE);
-        // check if message contains commands like leave
-        // temporary
-        if(strcmp(message->data, ":leave|") == 0) {
+        if(strcmp(message->data, leave_msg) == 0) {
             remove_user(*user, ch_indx);
             break;
+        } else if (strcmp(message->data, delete_msg) == 0) {
+            // delete ch_indx channel only if this is the creator
+            //
+            break;
         }
-        if(message->data == NULL || message->data == "") break;
+        if(strcmp(message->data, "") == 0) break;
         enqueue(message, ch_indx);
 
     }
@@ -204,35 +214,36 @@ int dialogue(user_t* user, int ch_indx) {
  */
 void* user_main(void* args) {
 
-    user_t user;
-    user.socket = (int) args;
+    user_t user_obj;
+    user_t* user = &user_obj;
+    user->socket = (int) args;
 
-    recv_packet(user.socket, user.nickname, NICKNAME_SIZE);
+    recv_packet(user->socket, user->nickname, NICKNAME_SIZE);
     LOGi("Received nickname");
 
     char command[COMMAND_SIZE];
-    recv_packet(user.socket, command, COMMAND_SIZE);
+    recv_packet(user->socket, command, COMMAND_SIZE);
     LOGi("Received command");
 
     if (strcmp(command, ":join") == 0) {
         char channel_name[CHNAME_SIZE];
-        recv_packet(user.socket, channel_name, CHNAME_SIZE);
+        recv_packet(user->socket, channel_name, CHNAME_SIZE);
         LOGi("Received channel name");
         LOGi(channel_name);
         int ch_indx = find_ch_byname(channel_name);
         add_user(user, ch_indx);
         LOGi("New user joined");
-        dialogue(&user, ch_indx);
+        dialogue(user, ch_indx);
 
     } else if (strcmp(command, ":create") == 0) {
         char channel_name[CHNAME_SIZE];
-        recv_packet(user.socket, channel_name, CHNAME_SIZE);
+        recv_packet(user->socket, channel_name, CHNAME_SIZE);
         LOGi("Received new channel name");
         LOGi(channel_name);
         int ch_indx = init_channel(channel_name);
         add_user(user, ch_indx);
         LOGi("Added new user");
-        dialogue(&user, ch_indx);
+        dialogue(user, ch_indx);
     }
 
     pthread_exit(NULL);
@@ -244,41 +255,23 @@ void* user_main(void* args) {
 void smooth_exit(int unused1, siginfo_t *info, void *unused2) {
     char signal_caught_msg[32];
     sprintf(signal_caught_msg,
-            "Caught signal: sig%s",
+            "Caught signal: sig%s\n",
             sys_signame[info->si_signo]);
-    printf("\n");
     LOGi(signal_caught_msg);
     // alert all connected clients
+    msg_t alert_msg;
+    sprintf(alert_msg.nickname, "%s", "MyChannel");
+    sprintf(alert_msg.data, "%s", "Sorry, Error occcurred in server");
     for (int i=0; i<MAX_CHANNELS; i++) {
         if(channels[i] != NULL) {
-            for (int j=0; j<MAX_CH_USERS; j++) {
-                if(channels[i]->ch_users[j] != NULL){
-                    int total_size = NICKNAME_SIZE + MSG_SIZE + 4;
-                    char buff[NICKNAME_SIZE + MSG_SIZE + 4] = {0};
-                    sprintf(buff, "%s: %s",
-                            "server message",
-                            "Sorry, Error occcurred in server");
-                    LOGd("Alerting user:");
-                    LOGd(channels[i]->ch_users[j]->nickname);
-                    send_stream(channels[i]->ch_users[j]->socket,
-                                buff, total_size);
-                }
-            }
+            enqueue(&alert_msg, i);
         }
     }
+    sleep(1);
     // free all structures
     for (int i=0; i<MAX_CHANNELS; i++) {
-        if(channels[i] != NULL) {
-            for (int j=0; j<MAX_CH_USERS; j++) {
-                if(channels[i]->ch_users[j] != NULL)
-                    free(channels[i]->ch_users[j]);
-            }
-            for (int j=0; j<QUEUE_SIZE; j++) {
-                if(channels[i]->ch_queue[j] != NULL)
-                    free(channels[i]->ch_queue[j]);
-            }
+        if(channels[i] != NULL)
             free(channels[i]);
-        }
     }
     // close all descriptors
 

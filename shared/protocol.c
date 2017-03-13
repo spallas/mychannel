@@ -26,6 +26,7 @@ void send_stream(int sockfd, char* buff, int max_msg_size) {
     while(bytes_left) {
         int ret = send(sockfd, buff + sent_bytes, 1, 0);
         if(ret == -1 && errno == EINTR) continue;
+        if(ret == EPIPE) break;
         ERROR_HELPER(ret, "Could not write to socket in send_stream");
         sent_bytes += ret;
         bytes_left -= ret;
@@ -45,16 +46,18 @@ void recv_packet(int sockfd, char* buff, int packet_size) {
     }
 }
 
-void recv_stream(int sockfd, char* buff, int max_msg_size) {
-    int sent_bytes = 0;
+int recv_stream(int sockfd, char* buff, int max_msg_size) {
+    int recvd_bytes = 0;
     int bytes_left = max_msg_size;
+    int ret = 0;
     while(bytes_left) {
-        int ret = recv(sockfd, buff + sent_bytes, 1, 0);
+        ret = recv(sockfd, buff + recvd_bytes, 1, 0);
         if(ret == -1 && errno == EINTR) continue;
         if(ret == 0) break;
         ERROR_HELPER(ret, "Could not read from socket in recv_stream");
-        sent_bytes += ret;
+        recvd_bytes += ret;
         bytes_left -= ret;
-        if(buff[sent_bytes-1] == MSG_DELIMITER_CHAR) break;
+        if(buff[recvd_bytes-1] == MSG_DELIMITER_CHAR) break;
     }
+    return ret;
 }
