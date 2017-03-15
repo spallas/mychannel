@@ -1,4 +1,4 @@
-CC = gcc
+CC = gcc -std=c99
 CC-DEBUG = $(CC) -Wall -ggdb -DDEBUG
 CC-RELEASE = $(CC) -O3 -fsanitize=address
 LDFLAGS = -lpthread
