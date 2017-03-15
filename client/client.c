@@ -123,6 +123,7 @@ void* send_msg(void* args) {
     sprintf(leave_msg, "%s%c", LEAVE_COMMAND, MSG_DELIMITER_CHAR);
     char delete_msg[COMMAND_SIZE];
     sprintf(delete_msg, "%s%c", DELETE_COMMAND, MSG_DELIMITER_CHAR);
+    pthread_setcanceltype(PTHREAD_CANCEL_ASYNCHRONOUS, NULL);
 
     while(1) {
         readln(message, MSG_SIZE);
@@ -154,9 +155,10 @@ void* recv_msg(void* args) {
     while(1) {
         int ret = recv_stream(sockfd, message, MSG_SIZE);
         if(ret == 0) {
-            printf("Something is not online\n");
-            printf("Exiting...\n");
+            printf("MyChannel servers are isuuing problems...\nPress enter to quit > ");
+            fflush(stdout);
             pthread_cancel(threads[0]);
+            pthread_join(threads[0], NULL);
             pthread_exit(NULL);
         }
         LOGd("Received message from server: ");

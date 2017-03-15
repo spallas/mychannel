@@ -34,6 +34,7 @@ typedef struct ch_s {
     user_t* ch_users[MAX_CH_USERS];
     int    num_users;
     msg_t*   ch_queue[QUEUE_SIZE];
+    pthread_t broadcast_thread;
     int read_index;
     int write_index;
 } ch_t;

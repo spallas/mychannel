@@ -1,5 +1,5 @@
 CC = gcc
-CC-DEBUG = $(CC) -Wall -g -DDEBUG
+CC-DEBUG = $(CC) -Wall -ggdb -DDEBUG
 CC-RELEASE = $(CC) -O3 -fsanitize=address
 LDFLAGS = -lpthread
 

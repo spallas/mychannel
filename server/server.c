@@ -7,7 +7,7 @@
 #define SERVER_PORT 8500
 #define MAX_PENDING_REQ 3
 
-ch_t* channels[MAX_CHANNELS] = {0};
+ch_t* channels[MAX_CHANNELS];
 int num_channels;
 
 int add_user_mutex;    // correspond to semaphore array
@@ -105,6 +105,8 @@ msg_t* dequeue(int ch_indx) {
 void* broadcast_routine(void* args) {
     int ch_indx= (int) args;
     LOGi("About to broadcast messages from broadcast_routine");
+    pthread_setcanceltype(PTHREAD_CANCEL_ASYNCHRONOUS, NULL);
+    // terminate thread as soon as requested
     while(1){
         msg_t* msg = dequeue(ch_indx);
         for(int i=0; i<MAX_CH_USERS; i++){
@@ -143,9 +145,9 @@ int init_channel(char* channel_name) {
             num_channels++;
             // unlock semaphore before creating thread and exiting the function
             mutex_unlock(init_channel_mutex, 0);
-            pthread_t thread;
-            pthread_create(&thread, NULL, broadcast_routine, (void*) i);
-            pthread_detach(thread);
+            pthread_create(&(channels[i]->broadcast_thread),
+                            NULL, broadcast_routine, (void*) i);
+            pthread_detach(channels[i]->broadcast_thread);
             return i;
         }
     }
@@ -270,8 +272,16 @@ void smooth_exit(int unused1, siginfo_t *info, void *unused2) {
     sleep(1);
     // free all structures
     for (int i=0; i<MAX_CHANNELS; i++) {
-        if(channels[i] != NULL)
+        if(channels[i] != NULL) {
+            pthread_cancel(channels[i]->broadcast_thread);
+            pthread_join(channels[i]->broadcast_thread, NULL);
+            for (int j=0; j<QUEUE_SIZE; j++) {
+                if(channels[i]->ch_queue[j] != NULL) {
+                    free(channels[i]->ch_queue[j]);
+                }
+            }
             free(channels[i]);
+        }
     }
     // close all descriptors
 
@@ -282,6 +292,7 @@ void smooth_exit(int unused1, siginfo_t *info, void *unused2) {
     sem_close(empty_sem);
     sem_close(init_channel_mutex);
     // and?
+    //TODO: close sockets
 
     exit(EXIT_FAILURE);
 }
@@ -369,7 +380,7 @@ int main(int argc, char const *argv[]) {
 
     // declare a variable to hold client address and its length
     // these will be filled by accept
-    struct sockaddr_in client_addr;
+    struct sockaddr_in* client_addr = malloc(sizeof(struct sockaddr_in));
     unsigned int client_addr_len;
 
     // declare variable for descriptor returned by accept
@@ -381,12 +392,13 @@ int main(int argc, char const *argv[]) {
     while(1) {
         LOGi("Accepting new connections...");
         client_desc = accept(server_desc,
-                             (struct sockaddr*) &client_addr,
+                             (struct sockaddr*) client_addr,
                              &client_addr_len);
 
         pthread_t user_thread;
         pthread_create(&user_thread, NULL, user_main, (void*) client_desc);
         pthread_detach(user_thread);
+        memset(client_addr, 0, sizeof(struct sockaddr_in));
      }
 
      exit(EXIT_SUCCESS);
