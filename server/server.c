@@ -258,7 +258,7 @@ void smooth_exit(int unused1, siginfo_t *info, void *unused2) {
     char signal_caught_msg[32];
     sprintf(signal_caught_msg,
             "Caught signal: sig%s\n",
-            sys_signame[info->si_signo]);
+            /*sys_signame[info->si_signo]*/ "idk");
     LOGi(signal_caught_msg);
     // alert all connected clients
     msg_t alert_msg;
