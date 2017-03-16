@@ -86,7 +86,7 @@ void enqueue(msg_t* message, int ch_indx) {
  *                 where to get the last message.
  */
 msg_t* dequeue(int ch_indx) {
-    msg_t* msg = NULL;
+    msg_t* msg;
     sem_wait(fill_sem, ch_indx);
 
     int read_index =  (channels[ch_indx]->read_index);
@@ -109,17 +109,17 @@ void* broadcast_routine(void* args) {
     // terminate thread as soon as requested
     while(1){
         msg_t* msg = dequeue(ch_indx);
+        printf("address of message is: %p\n", msg);
         for(int i=0; i<MAX_CH_USERS; i++){
             if(channels[ch_indx]->ch_users[i] == NULL) continue;
             if(strcmp(channels[ch_indx]->ch_users[i]->nickname, msg->nickname)==0)
                 continue;
-            //printf("%d\n", channels[ch_indx]->ch_users[i]->socket);
             int total_size = NICKNAME_SIZE + MSG_SIZE + 4;
             char buff[NICKNAME_SIZE + MSG_SIZE + 4] = {0};
             sprintf(buff, "%s: %s", msg->nickname, msg->data);
             send_stream(channels[ch_indx]->ch_users[i]->socket, buff, total_size);
         }
-        //free(msg);
+        free(msg);
     }
     pthread_exit(NULL);
 }
@@ -156,14 +156,21 @@ int init_channel(char* channel_name) {
 
 
 int delete_channel(int ch_indx) {
-    int i = ch_indx;
+    int idx = ch_indx;
+    int i;
     msg_t alert_msg;
     sprintf(alert_msg.nickname, "%s", "MyChannel");
     sprintf(alert_msg.data, "%s", "Sorry, Error occcurred in server");
-    if(channels[i] != NULL) {
-        enqueue(&alert_msg, i);
+    if(channels[idx] != NULL) {
+        enqueue(&alert_msg, idx);
         sleep(1);
-        free(channels[i]);
+        for (i = 0; i<MAX_CH_USERS; i++) {
+            // TODO: terminate user's thread
+            channels[ch_indx]->ch_users[i] = NULL;
+            LOGi("Removed user");
+            LOGe(user.nickname);
+        }
+        free(channels[idx]);
     }
     return 0;
 }
@@ -201,7 +208,8 @@ int dialogue(user_t* user, int ch_indx) {
             break;
         } else if (strcmp(message->data, delete_msg) == 0) {
             // delete ch_indx channel only if this is the creator
-            //
+            if(strcmp(user->nickname, channels[ch_idx]->ch_owner)==0)
+                delete_channel(ch_idx);
             break;
         }
         if(strcmp(message->data, "") == 0) break;
@@ -261,12 +269,12 @@ void smooth_exit(int unused1, siginfo_t *info, void *unused2) {
             /*sys_signame[info->si_signo]*/ "idk");
     LOGi(signal_caught_msg);
     // alert all connected clients
-    msg_t alert_msg;
-    sprintf(alert_msg.nickname, "%s", "MyChannel");
-    sprintf(alert_msg.data, "%s", "Sorry, Error occcurred in server");
+    msg_t* alert_msg = malloc(sizeof(msg_t));
+    sprintf(alert_msg->nickname, "%s", "MyChannel");
+    sprintf(alert_msg->data, "%s", "Sorry, Error occcurred in server");
     for (int i=0; i<MAX_CHANNELS; i++) {
         if(channels[i] != NULL) {
-            enqueue(&alert_msg, i);
+            enqueue(alert_msg, i);
         }
     }
     sleep(1);
@@ -274,10 +282,9 @@ void smooth_exit(int unused1, siginfo_t *info, void *unused2) {
     for (int i=0; i<MAX_CHANNELS; i++) {
         if(channels[i] != NULL) {
             pthread_cancel(channels[i]->broadcast_thread);
-            pthread_join(channels[i]->broadcast_thread, NULL);
             for (int j=0; j<QUEUE_SIZE; j++) {
                 if(channels[i]->ch_queue[j] != NULL) {
-                    free(channels[i]->ch_queue[j]);
+                    //free(channels[i]->ch_queue[j]);
                 }
             }
             free(channels[i]);
@@ -370,7 +377,8 @@ int main(int argc, char const *argv[]) {
     int server_desc = socket(AF_INET, SOCK_STREAM, 0);
 
     int enable = 1;
-    err = setsockopt(server_desc, SOL_SOCKET, SO_REUSEADDR, &enable, sizeof(int));
+    err = setsockopt(server_desc, SOL_SOCKET,
+                     SO_REUSEADDR, &enable, sizeof(int));
     ERROR_HELPER(err, "setsockopt(SO_REUSEADDR) failed");
 
     // initialize the server address with port defined above
