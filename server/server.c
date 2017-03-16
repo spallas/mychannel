@@ -353,6 +353,8 @@ int main(int argc, char const *argv[]) {
     handle_signal(SIGILL, smooth_exit);
     handle_signal(SIGSEGV,sigsegv_exit);
 
+
+
     // initialize semaphores
     add_user_mutex     = mutex_init(MAX_CHANNELS);
     init_channel_mutex = mutex_init(1);
@@ -365,6 +367,10 @@ int main(int argc, char const *argv[]) {
 
     // initialize the listening socket, use default protocol
     int server_desc = socket(AF_INET, SOCK_STREAM, 0);
+
+    int enable = 1;
+    err = setsockopt(server_desc, SOL_SOCKET, SO_REUSEADDR, &enable, sizeof(int));
+    ERROR_HELPER(err, "setsockopt(SO_REUSEADDR) failed");
 
     // initialize the server address with port defined above
     struct sockaddr_in server_addr = {0};
@@ -398,7 +404,7 @@ int main(int argc, char const *argv[]) {
         pthread_t user_thread;
         pthread_create(&user_thread, NULL, user_main, (void*) client_desc);
         pthread_detach(user_thread);
-        memset(client_addr, 0, sizeof(struct sockaddr_in));
+        client_addr = calloc(1,sizeof(struct sockaddr_in));
      }
 
      exit(EXIT_SUCCESS);
