@@ -134,7 +134,7 @@ void* send_msg(void* args) {
             break;
         } else if(strcmp(message, delete_msg) == 0) {
             printf("Leaving the channel...\n");
-            printf("Telling MyChannel to delete the channel...\n");+
+            printf("Telling MyChannel to delete the channel...\n");
             delete = 1;
             pthread_cancel(threads[1]);
             break;
