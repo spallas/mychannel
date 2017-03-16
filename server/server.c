@@ -156,14 +156,21 @@ int init_channel(char* channel_name) {
 
 
 int delete_channel(int ch_indx) {
-    int i = ch_indx;
+    int idx = ch_indx;
+    int i;
     msg_t alert_msg;
     sprintf(alert_msg.nickname, "%s", "MyChannel");
     sprintf(alert_msg.data, "%s", "Sorry, Error occcurred in server");
-    if(channels[i] != NULL) {
-        enqueue(&alert_msg, i);
+    if(channels[idx] != NULL) {
+        enqueue(&alert_msg, idx);
         sleep(1);
-        free(channels[i]);
+        for (i = 0; i<MAX_CH_USERS; i++) {
+            // TODO: terminate user's thread
+            channels[ch_indx]->ch_users[i] = NULL;
+            LOGi("Removed user");
+            LOGe(user.nickname);
+        }
+        free(channels[idx]);
     }
     return 0;
 }
@@ -201,7 +208,8 @@ int dialogue(user_t* user, int ch_indx) {
             break;
         } else if (strcmp(message->data, delete_msg) == 0) {
             // delete ch_indx channel only if this is the creator
-            //
+            if(strcmp(user->nickname, channels[ch_idx]->ch_owner)==0)
+                delete_channel(ch_idx);
             break;
         }
         if(strcmp(message->data, "") == 0) break;
