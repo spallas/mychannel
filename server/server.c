@@ -11,6 +11,7 @@ ch_t* channels[MAX_CHANNELS];
 int num_channels;
 
 int add_user_mutex;    // correspond to semaphore array
+int add_owner_mutex;
 int init_channel_mutex;
 int write_mutex;
 int fill_sem;
@@ -42,6 +43,21 @@ int add_user(user_t* user, int ch_indx) {
     ERROR_HELPER(-1, "Inconsistency in num_users");
     return -1;
 }
+
+
+int add_owner(user_t* owner, int ch_indx) {
+    if(has_owner(ch_indx)) return -1;
+    mutex_lock(add_owner_mutex, ch_indx);
+    strncpy(channels[ch_indx]->ch_owner, owner->nickname, NICKNAME_SIZE);
+    mutex_unlock(add_owner_mutex, ch_indx);
+    return 0;
+}
+
+
+int has_owner(int ch_indx) {
+    return channels[ch_indx]->ch_owner != NULL;
+}
+
 
 int remove_user(user_t user, int ch_indx) {
     int i;
@@ -158,9 +174,9 @@ int init_channel(char* channel_name) {
 int delete_channel(int ch_indx) {
     int idx = ch_indx;
     int i;
-    msg_t alert_msg;
-    sprintf(alert_msg.nickname, "%s", "MyChannel");
-    sprintf(alert_msg.data, "%s", "Sorry, Error occcurred in server");
+    msg_t* alert_msg = malloc(sizeof(msg_t));
+    sprintf(alert_msg->nickname, "%s", "MyChannel");
+    sprintf(alert_msg->data, "%s", "Sorry, Error occcurred in server");
     if(channels[idx] != NULL) {
         enqueue(&alert_msg, idx);
         sleep(1);
@@ -251,6 +267,7 @@ void* user_main(void* args) {
         LOGi("Received new channel name");
         LOGi(channel_name);
         int ch_indx = init_channel(channel_name);
+        add_owner(user, ch_indx);
         add_user(user, ch_indx);
         LOGi("Added new user");
         dialogue(user, ch_indx);
@@ -294,6 +311,7 @@ void smooth_exit(int unused1, siginfo_t *info, void *unused2) {
 
     // close all semaphores
     sem_close(add_user_mutex);
+    sem_close(add_owner_mutex);
     sem_close(write_mutex);
     sem_close(fill_sem);
     sem_close(empty_sem);
@@ -365,7 +383,9 @@ int main(int argc, char const *argv[]) {
 
     // initialize semaphores
     add_user_mutex     = mutex_init(MAX_CHANNELS);
+    add_owner_mutex    = mutex_init(MAX_CHANNELS);
     init_channel_mutex = mutex_init(1);
+
     write_mutex = mutex_init(MAX_CHANNELS);
     fill_sem    = sem_init(0, MAX_CHANNELS);
     empty_sem   = sem_init(QUEUE_SIZE, MAX_CHANNELS);
