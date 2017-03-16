@@ -119,7 +119,7 @@ void* broadcast_routine(void* args) {
             sprintf(buff, "%s: %s", msg->nickname, msg->data);
             send_stream(channels[ch_indx]->ch_users[i]->socket, buff, total_size);
         }
-        free(msg);
+        //free(msg);
     }
     pthread_exit(NULL);
 }
@@ -314,6 +314,7 @@ void handle_signal(int signal, void (*handler)(int, siginfo_t *, void *)) {
     struct sigaction act;
     act.sa_sigaction = handler;
     act.sa_flags = SA_SIGINFO;
+    act.sa_mask  = mask;
     int err = sigaction(signal, &act, NULL); // assign handler to signal
     ERROR_HELPER(err, "Error in handle_signal: sigaction()");
 }
