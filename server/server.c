@@ -387,7 +387,7 @@ int main(int argc, char const *argv[]) {
     // declare a variable to hold client address and its length
     // these will be filled by accept
     struct sockaddr_in* client_addr = malloc(sizeof(struct sockaddr_in));
-    unsigned int client_addr_len;
+    unsigned int client_addr_len = 0;
 
     // declare variable for descriptor returned by accept
     int client_desc;
