@@ -143,8 +143,9 @@ void* send_msg(void* args) {
         LOGd("Sent message to server...");
         memset(message, 0, MSG_SIZE);
     }
-    send_stream(sockfd, leave_msg, COMMAND_SIZE);
     if(delete) send_stream(sockfd, delete_msg, COMMAND_SIZE);
+    else send_stream(sockfd, leave_msg, COMMAND_SIZE);
+
     LOGd("Sent message to server...");
     pthread_exit(NULL);
 }
@@ -157,7 +158,8 @@ void* recv_msg(void* args) {
     while(1) {
         int ret = recv_stream(sockfd, message, MSG_SIZE);
         if(ret == 0) {
-            printf("MyChannel servers are isuuing problems...\nPress enter to quit > ");
+            printf("MyChannel servers are issuing problems...\n");
+            printf("Press enter to quit > ");
             fflush(stdout);
             pthread_cancel(threads[0]);
             pthread_join(threads[0], NULL);

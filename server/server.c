@@ -125,7 +125,6 @@ void* broadcast_routine(void* args) {
     // terminate thread as soon as requested
     while(1){
         msg_t* msg = dequeue(ch_indx);
-        printf("address of message is: %p\n", msg);
         for(int i=0; i<MAX_CH_USERS; i++){
             if(channels[ch_indx]->ch_users[i] == NULL) continue;
             if(strcmp(channels[ch_indx]->ch_users[i]->nickname, msg->nickname)==0)
@@ -176,16 +175,13 @@ int delete_channel(int ch_indx) {
     int i;
     msg_t* alert_msg = malloc(sizeof(msg_t));
     sprintf(alert_msg->nickname, "%s", "MyChannel");
-    sprintf(alert_msg->data, "%s", "Sorry, Error occcurred in server");
+    sprintf(alert_msg->data, "%s", "Sorry, channel was deleted by owner");
     if(channels[idx] != NULL) {
         enqueue(alert_msg, idx);
+        pthread_cancel(channels[idx]->broadcast_thread);
         sleep(1);
-        for (i = 0; i<MAX_CH_USERS; i++) {
-            // TODO: terminate user's thread
-            channels[ch_indx]->ch_users[i] = NULL;
-            LOGi("Is this necessary?");
-        }
         free(channels[idx]);
+        LOGi("Channel deleted!");
     }
     return 0;
 }
@@ -209,7 +205,7 @@ int find_ch_byname(char* name) {
  * @param user : sender
  * @param ch_indx : the channel the user is talking to
  */
-int dialogue(user_t* user, int ch_indx) {
+int dialogue(user_t* user, int ch_indx, int is_owner) {
     char leave_msg[COMMAND_SIZE];
     sprintf(leave_msg, "%s%c", LEAVE_COMMAND, MSG_DELIMITER_CHAR);
     char delete_msg[COMMAND_SIZE];
@@ -223,8 +219,10 @@ int dialogue(user_t* user, int ch_indx) {
             break;
         } else if (strcmp(message->data, delete_msg) == 0) {
             // delete ch_indx channel only if this is the creator
-            if(strcmp(user->nickname, channels[ch_indx]->ch_owner)==0)
+            if(is_owner) {
+                LOGd("About to delete a channel...");
                 delete_channel(ch_indx);
+            }
             break;
         }
         if(strcmp(message->data, "") == 0) break;
@@ -258,7 +256,7 @@ void* user_main(void* args) {
         int ch_indx = find_ch_byname(channel_name);
         add_user(user, ch_indx);
         LOGi("New user joined");
-        dialogue(user, ch_indx);
+        dialogue(user, ch_indx, 0);
 
     } else if (strcmp(command, ":create") == 0) {
         char channel_name[CHNAME_SIZE];
@@ -269,7 +267,7 @@ void* user_main(void* args) {
         add_owner(user, ch_indx);
         add_user(user, ch_indx);
         LOGi("Added new user");
-        dialogue(user, ch_indx);
+        dialogue(user, ch_indx, 1);
     }
 
     pthread_exit(NULL);
