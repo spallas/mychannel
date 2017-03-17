@@ -175,7 +175,7 @@ int init_channel(char* channel_name) {
 int delete_channel(int ch_indx) {
     msg_t* alert_msg = malloc(sizeof(msg_t));
     sprintf(alert_msg->nickname, "%s", channels[ch_indx]->ch_owner);
-    sprintf(alert_msg->data, "%s", "Sorry, I deleted this channel|");
+    sprintf(alert_msg->data, "%s", "Sorry, I deleted this channel! Send :leave to leave the channel|");
     if(channels[ch_indx] != NULL) {
         enqueue(alert_msg, ch_indx);
         sleep(1);
