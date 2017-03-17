@@ -16,6 +16,12 @@
 #include "protocol.h"
 #include "semaphore.h"
 
+#ifdef __APPLE__
+#else
+  #define _GNU_SOURCE
+  #define _POSIX_C_SOURCE=199309L
+#endif
+
 #define GENERIC_ERROR_HELPER(cond, errCode, msg) do {               \
         if (cond) {                                                 \
             fprintf(stderr, "%s: %s\n", msg, strerror(errCode));    \

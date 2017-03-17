@@ -55,7 +55,7 @@ int add_owner(user_t* owner, int ch_indx) {
 
 
 int has_owner(int ch_indx) {
-    return channels[ch_indx]->ch_owner != NULL;
+    return strcmp(channels[ch_indx]->ch_owner, "");
 }
 
 
@@ -171,16 +171,14 @@ int init_channel(char* channel_name) {
 
 
 int delete_channel(int ch_indx) {
-    int idx = ch_indx;
-    int i;
     msg_t* alert_msg = malloc(sizeof(msg_t));
     sprintf(alert_msg->nickname, "%s", "MyChannel");
     sprintf(alert_msg->data, "%s", "Sorry, channel was deleted by owner");
-    if(channels[idx] != NULL) {
-        enqueue(alert_msg, idx);
-        pthread_cancel(channels[idx]->broadcast_thread);
+    if(channels[ch_indx] != NULL) {
+        enqueue(alert_msg, ch_indx);
         sleep(1);
-        free(channels[idx]);
+        pthread_cancel(channels[ch_indx]->broadcast_thread);
+        free(channels[ch_indx]);
         LOGi("Channel deleted!");
     }
     return 0;
@@ -222,8 +220,8 @@ int dialogue(user_t* user, int ch_indx, int is_owner) {
             if(is_owner) {
                 LOGd("About to delete a channel...");
                 delete_channel(ch_indx);
+                break;
             }
-            break;
         }
         if(strcmp(message->data, "") == 0) break;
         enqueue(message, ch_indx);
@@ -279,8 +277,8 @@ void* user_main(void* args) {
 void smooth_exit(int unused1, siginfo_t *info, void *unused2) {
     char signal_caught_msg[32];
     sprintf(signal_caught_msg,
-            "Caught signal: sig%s\n",
-            sys_signame[info->si_signo]);
+            "Caught signal: %s\n",
+            strsignal(info->si_signo));
     LOGi(signal_caught_msg);
     // alert all connected clients
     msg_t* alert_msg = malloc(sizeof(msg_t));
