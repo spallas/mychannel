@@ -277,13 +277,8 @@ void* user_main(void* args) {
 void smooth_exit(int unused1, siginfo_t *info, void *unused2) {
     char signal_caught_msg[32];
     sprintf(signal_caught_msg,
-<<<<<<< HEAD
-            "Caught signal: sig%s\n",
-            /*sys_signame[info->si_signo]*/ "idk");
-=======
             "Caught signal: %s\n",
             strsignal(info->si_signo));
->>>>>>> 953f3c11534ab647e1743441d287abfba7bce8de
     LOGi(signal_caught_msg);
     // alert all connected clients
     msg_t* alert_msg = malloc(sizeof(msg_t));
