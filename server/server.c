@@ -61,21 +61,7 @@ int add_owner(user_t* owner, int ch_indx) {
 }
 
 
-int remove_user(user_t user, int ch_indx) {
-    int i;
-    for (i = 0; i<MAX_CH_USERS; i++) {
-        if(strcmp(user.nickname, channels[ch_indx]->ch_users[i]->nickname)==0) {
-            // TODO: terminate user's thread
-            channels[ch_indx]->ch_users[i] = NULL;
-            LOGi("Removed user");
-            LOGe(user.nickname);
-            return 0;
-        }
-    }
-    LOGe(user.nickname);
-    LOGe("User not found");
-    return -1;
-}
+
 
 /**
  * Add a message to the queue of messages that were sent to the ch_indx
@@ -171,6 +157,26 @@ int init_channel(char* channel_name) {
     ERROR_HELPER(-1, "Incosistency in num_channels variable");
 }
 
+
+int remove_user(user_t user, int ch_indx) {
+    int i;
+    msg_t* alert_msg = malloc(sizeof(msg_t));
+    sprintf(alert_msg->nickname, "%s", user.nickname);
+    sprintf(alert_msg->data, "%s", "I'm leaving the channel. Bye folks!|");
+    enqueue(alert_msg, ch_indx);
+    for (i = 0; i<MAX_CH_USERS; i++) {
+        if(strcmp(user.nickname, channels[ch_indx]->ch_users[i]->nickname)==0) {
+            // TODO: terminate user's thread
+            channels[ch_indx]->ch_users[i] = NULL;
+            LOGi("Removed user");
+            LOGe(user.nickname);
+            return 0;
+        }
+    }
+    LOGe(user.nickname);
+    LOGe("User not found");
+    return -1;
+}
 
 int delete_channel(int ch_indx) {
     msg_t* alert_msg = malloc(sizeof(msg_t));
