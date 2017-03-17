@@ -245,6 +245,7 @@ void* user_main(void* args) {
     user_t* user = &user_obj;
     user->socket = (int) args;
 
+    int err;
     recv_packet(user->socket, user->nickname, NICKNAME_SIZE);
     LOGi("Received nickname");
 
@@ -260,6 +261,8 @@ void* user_main(void* args) {
         int ch_indx = find_ch_byname(channel_name);
         if(ch_indx < 0) {
             // send channel not existent message and listen to new command
+            err = close(user->socket);
+            if(err<0) LOGe("Error closing socket in user_main");
             pthread_exit(NULL);
         } else {
             add_user(user, ch_indx);
@@ -279,6 +282,8 @@ void* user_main(void* args) {
         dialogue(user, ch_indx, 1);
     }
 
+    err = close(user->socket);
+    if(err<0) LOGe("Error closing socket in user_main");
     pthread_exit(NULL);
 }
 
