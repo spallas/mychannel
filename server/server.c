@@ -11,6 +11,7 @@ ch_t* channels[MAX_CHANNELS];
 int num_channels;
 
 int add_user_mutex;    // correspond to semaphore array
+int add_owner_mutex;
 int init_channel_mutex;
 int write_mutex;
 int fill_sem;
@@ -42,6 +43,21 @@ int add_user(user_t* user, int ch_indx) {
     ERROR_HELPER(-1, "Inconsistency in num_users");
     return -1;
 }
+
+
+int add_owner(user_t* owner, int ch_indx) {
+    if(has_owner(ch_indx)) return -1;
+    mutex_lock(add_owner_mutex, ch_indx);
+    strncpy(channels[ch_indx]->ch_owner, owner->nickname, NICKNAME_SIZE);
+    mutex_unlock(add_owner_mutex, ch_indx);
+    return 0;
+}
+
+
+int has_owner(int ch_indx) {
+    return strcmp(channels[ch_indx]->ch_owner, "");
+}
+
 
 int remove_user(user_t user, int ch_indx) {
     int i;
@@ -109,7 +125,6 @@ void* broadcast_routine(void* args) {
     // terminate thread as soon as requested
     while(1){
         msg_t* msg = dequeue(ch_indx);
-        printf("address of message is: %p\n", msg);
         for(int i=0; i<MAX_CH_USERS; i++){
             if(channels[ch_indx]->ch_users[i] == NULL) continue;
             if(strcmp(channels[ch_indx]->ch_users[i]->nickname, msg->nickname)==0)
@@ -156,21 +171,15 @@ int init_channel(char* channel_name) {
 
 
 int delete_channel(int ch_indx) {
-    int idx = ch_indx;
-    int i;
-    msg_t alert_msg;
-    sprintf(alert_msg.nickname, "%s", "MyChannel");
-    sprintf(alert_msg.data, "%s", "Sorry, Error occcurred in server");
-    if(channels[idx] != NULL) {
-        enqueue(&alert_msg, idx);
+    msg_t* alert_msg = malloc(sizeof(msg_t));
+    sprintf(alert_msg->nickname, "%s", "MyChannel");
+    sprintf(alert_msg->data, "%s", "Sorry, channel was deleted by owner");
+    if(channels[ch_indx] != NULL) {
+        enqueue(alert_msg, ch_indx);
         sleep(1);
-        for (i = 0; i<MAX_CH_USERS; i++) {
-            // TODO: terminate user's thread
-            channels[ch_indx]->ch_users[i] = NULL;
-            LOGi("Removed user");
-            LOGe(user.nickname);
-        }
-        free(channels[idx]);
+        pthread_cancel(channels[ch_indx]->broadcast_thread);
+        free(channels[ch_indx]);
+        LOGi("Channel deleted!");
     }
     return 0;
 }
@@ -194,7 +203,7 @@ int find_ch_byname(char* name) {
  * @param user : sender
  * @param ch_indx : the channel the user is talking to
  */
-int dialogue(user_t* user, int ch_indx) {
+int dialogue(user_t* user, int ch_indx, int is_owner) {
     char leave_msg[COMMAND_SIZE];
     sprintf(leave_msg, "%s%c", LEAVE_COMMAND, MSG_DELIMITER_CHAR);
     char delete_msg[COMMAND_SIZE];
@@ -208,9 +217,11 @@ int dialogue(user_t* user, int ch_indx) {
             break;
         } else if (strcmp(message->data, delete_msg) == 0) {
             // delete ch_indx channel only if this is the creator
-            if(strcmp(user->nickname, channels[ch_idx]->ch_owner)==0)
-                delete_channel(ch_idx);
-            break;
+            if(is_owner) {
+                LOGd("About to delete a channel...");
+                delete_channel(ch_indx);
+                break;
+            }
         }
         if(strcmp(message->data, "") == 0) break;
         enqueue(message, ch_indx);
@@ -243,7 +254,7 @@ void* user_main(void* args) {
         int ch_indx = find_ch_byname(channel_name);
         add_user(user, ch_indx);
         LOGi("New user joined");
-        dialogue(user, ch_indx);
+        dialogue(user, ch_indx, 0);
 
     } else if (strcmp(command, ":create") == 0) {
         char channel_name[CHNAME_SIZE];
@@ -251,9 +262,10 @@ void* user_main(void* args) {
         LOGi("Received new channel name");
         LOGi(channel_name);
         int ch_indx = init_channel(channel_name);
+        add_owner(user, ch_indx);
         add_user(user, ch_indx);
         LOGi("Added new user");
-        dialogue(user, ch_indx);
+        dialogue(user, ch_indx, 1);
     }
 
     pthread_exit(NULL);
@@ -265,8 +277,13 @@ void* user_main(void* args) {
 void smooth_exit(int unused1, siginfo_t *info, void *unused2) {
     char signal_caught_msg[32];
     sprintf(signal_caught_msg,
+<<<<<<< HEAD
             "Caught signal: sig%s\n",
             /*sys_signame[info->si_signo]*/ "idk");
+=======
+            "Caught signal: %s\n",
+            strsignal(info->si_signo));
+>>>>>>> 953f3c11534ab647e1743441d287abfba7bce8de
     LOGi(signal_caught_msg);
     // alert all connected clients
     msg_t* alert_msg = malloc(sizeof(msg_t));
@@ -294,6 +311,7 @@ void smooth_exit(int unused1, siginfo_t *info, void *unused2) {
 
     // close all semaphores
     sem_close(add_user_mutex);
+    sem_close(add_owner_mutex);
     sem_close(write_mutex);
     sem_close(fill_sem);
     sem_close(empty_sem);
@@ -365,7 +383,9 @@ int main(int argc, char const *argv[]) {
 
     // initialize semaphores
     add_user_mutex     = mutex_init(MAX_CHANNELS);
+    add_owner_mutex    = mutex_init(MAX_CHANNELS);
     init_channel_mutex = mutex_init(1);
+
     write_mutex = mutex_init(MAX_CHANNELS);
     fill_sem    = sem_init(0, MAX_CHANNELS);
     empty_sem   = sem_init(QUEUE_SIZE, MAX_CHANNELS);
