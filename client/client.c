@@ -166,6 +166,8 @@ void* recv_msg(void* args) {
             pthread_exit(NULL);
         }
         LOGd("Received message from server: ");
+        //message[MSG_SIZE-1] = '\0';
+        //if(strlen(message) == 0) continue;
         message[strlen(message)-1] = '\0';
         printf("%s\n", message);
         memset(message, 0, MSG_SIZE);
