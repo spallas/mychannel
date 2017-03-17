@@ -18,6 +18,9 @@ int sockfd;
 sigset_t mask;
 int sem;
 
+int joining = 0;
+int creating = 0;
+
 int main(int argc, char const *argv[]) {
 
     int err = 0;
@@ -57,16 +60,14 @@ int main(int argc, char const *argv[]) {
     char command[COMMAND_SIZE];
     printf("Do you want to join or create a channel?\n");
     printf("(use :join or :create)\n> ");
-    int join = 0;
-    int create = 0;
     while(1){
         readln(command, COMMAND_SIZE);
         command[strlen(command)-1] = '\0'; // readln adds '\'
         if(strcmp(command, JOIN_COMMAND) == 0) {
-            join = 1;
+            joining = 1;
             break;
         } else if(strcmp(command, CREATE_COMMAND) == 0){
-            create = 1;
+            creating = 1;
             break;
         } else {
             printf("Please enter a valid command (:join or :create)\n> ");
@@ -74,9 +75,9 @@ int main(int argc, char const *argv[]) {
         }
     }
     char channel[CHNAME_SIZE];
-    if(join)
+    if(joining)
         printf("Which channel do you want to join?\n> ");
-    else if(create)
+    else if(creating)
         printf("What is the name of your new channel?\n> ");
     readln(channel, CHNAME_SIZE);
     channel[strlen(channel)-1] = '\0';
@@ -96,9 +97,9 @@ int main(int argc, char const *argv[]) {
     ERROR_HELPER(err, "connect()");
 
     send_packet(sockfd, nickname, NICKNAME_SIZE);
-    if (join) {
+    if (joining) {
         send_packet(sockfd, JOIN_COMMAND, COMMAND_SIZE);
-    } else if (create) {
+    } else if (creating) {
         send_packet(sockfd, CREATE_COMMAND, COMMAND_SIZE);
     }
     send_packet(sockfd, channel, CHNAME_SIZE);
@@ -132,7 +133,7 @@ void* send_msg(void* args) {
             printf("Leaving the channel...\n");
             pthread_cancel(threads[1]);
             break;
-        } else if(strcmp(message, delete_msg) == 0) {
+        } else if(strcmp(message, delete_msg) == 0 && creating) {
             printf("Leaving the channel...\n");
             printf("Telling MyChannel to delete the channel...\n");
             delete = 1;
