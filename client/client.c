@@ -163,7 +163,6 @@ void* recv_msg(void* args) {
             printf("Press enter to quit > ");
             fflush(stdout);
             pthread_cancel(threads[0]);
-            pthread_join(threads[0], NULL);
             pthread_exit(NULL);
         }
         LOGd("Received message from server: ");

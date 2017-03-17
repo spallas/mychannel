@@ -132,9 +132,12 @@ void* broadcast_routine(void* args) {
             if(strcmp(channels[ch_indx]->ch_users[i]->nickname, msg->nickname)==0)
                 continue;
             int total_size = NICKNAME_SIZE + MSG_SIZE + 4;
-            char buff[NICKNAME_SIZE + MSG_SIZE + 32] = {0};
-            sprintf(buff, "%s: %s", msg->nickname, msg->data);
+            char* buff = malloc(total_size);
+            strncpy(buff, msg->nickname, NICKNAME_SIZE);
+            strncat(buff, ": ", 2);
+            strncat(buff, msg->data, MSG_SIZE);
             send_stream(channels[ch_indx]->ch_users[i]->socket, buff, total_size);
+            free(buff);
         }
         free(msg);
     }
