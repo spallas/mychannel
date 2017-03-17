@@ -45,17 +45,19 @@ int add_user(user_t* user, int ch_indx) {
 }
 
 
+
+int has_owner(int ch_indx) {
+    return strcmp(channels[ch_indx]->ch_owner, "");
+}
+
+
+
 int add_owner(user_t* owner, int ch_indx) {
     if(has_owner(ch_indx)) return -1;
     mutex_lock(add_owner_mutex, ch_indx);
     strncpy(channels[ch_indx]->ch_owner, owner->nickname, NICKNAME_SIZE);
     mutex_unlock(add_owner_mutex, ch_indx);
     return 0;
-}
-
-
-int has_owner(int ch_indx) {
-    return strcmp(channels[ch_indx]->ch_owner, "");
 }
 
 
@@ -130,7 +132,7 @@ void* broadcast_routine(void* args) {
             if(strcmp(channels[ch_indx]->ch_users[i]->nickname, msg->nickname)==0)
                 continue;
             int total_size = NICKNAME_SIZE + MSG_SIZE + 4;
-            char buff[NICKNAME_SIZE + MSG_SIZE + 4] = {0};
+            char buff[NICKNAME_SIZE + MSG_SIZE + 32] = {0};
             sprintf(buff, "%s: %s", msg->nickname, msg->data);
             send_stream(channels[ch_indx]->ch_users[i]->socket, buff, total_size);
         }
@@ -172,13 +174,14 @@ int init_channel(char* channel_name) {
 
 int delete_channel(int ch_indx) {
     msg_t* alert_msg = malloc(sizeof(msg_t));
-    sprintf(alert_msg->nickname, "%s", "MyChannel");
-    sprintf(alert_msg->data, "%s", "Sorry, channel was deleted by owner");
+    sprintf(alert_msg->nickname, "%s", channels[ch_indx]->ch_owner);
+    sprintf(alert_msg->data, "%s", "Sorry, I deleted this channel|");
     if(channels[ch_indx] != NULL) {
         enqueue(alert_msg, ch_indx);
         sleep(1);
         pthread_cancel(channels[ch_indx]->broadcast_thread);
         free(channels[ch_indx]);
+        channels[ch_indx] = NULL;
         LOGi("Channel deleted!");
     }
     return 0;
@@ -217,7 +220,7 @@ int dialogue(user_t* user, int ch_indx, int is_owner) {
             break;
         } else if (strcmp(message->data, delete_msg) == 0) {
             // delete ch_indx channel only if this is the creator
-            if(is_owner) {
+            if(is_owner){
                 LOGd("About to delete a channel...");
                 delete_channel(ch_indx);
                 break;
@@ -252,9 +255,14 @@ void* user_main(void* args) {
         LOGi("Received channel name");
         LOGi(channel_name);
         int ch_indx = find_ch_byname(channel_name);
-        add_user(user, ch_indx);
-        LOGi("New user joined");
-        dialogue(user, ch_indx, 0);
+        if(ch_indx < 0) {
+            // send channel not existent message and listen to new command
+            pthread_exit(NULL);
+        } else {
+            add_user(user, ch_indx);
+            LOGi("New user joined");
+            dialogue(user, ch_indx, 0);
+        }
 
     } else if (strcmp(command, ":create") == 0) {
         char channel_name[CHNAME_SIZE];
@@ -283,7 +291,7 @@ void smooth_exit(int unused1, siginfo_t *info, void *unused2) {
     // alert all connected clients
     msg_t* alert_msg = malloc(sizeof(msg_t));
     sprintf(alert_msg->nickname, "%s", "MyChannel");
-    sprintf(alert_msg->data, "%s", "Sorry, Error occcurred in server");
+    sprintf(alert_msg->data, "%s", "Sorry, Error occcurred in server|");
     for (int i=0; i<MAX_CHANNELS; i++) {
         if(channels[i] != NULL) {
             enqueue(alert_msg, i);
