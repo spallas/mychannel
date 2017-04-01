@@ -1,5 +1,7 @@
 CC = gcc -std=c99
 CC-DEBUG = $(CC) -Wall -ggdb -DDEBUG
+# -D_GNU_SOURCE -D_POSIX_C_SOURCE=199309L 
+# uncomment when compiling for linux
 CC-RELEASE = $(CC) -O3 -fsanitize=address
 LDFLAGS = -lpthread
 
