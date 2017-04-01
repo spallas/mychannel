@@ -37,7 +37,7 @@ int main(int argc, char const *argv[]) {
     err |= pthread_sigmask(SIG_BLOCK, &mask, NULL);
 
     if(err != 0) {
-        fprintf(stderr, "%s: %s\n",
+        fprintf(stderr, "Last error -> %s: %s\n",
                 "Error in signal set initialization",  strerror(errno));
         exit(EXIT_FAILURE);
     }
@@ -94,7 +94,7 @@ int main(int argc, char const *argv[]) {
     inet_aton(SERVER_IP, &server_addr.sin_addr);
 
     err = connect(sockfd, (struct sockaddr*) &server_addr, addr_size);
-    ERROR_HELPER(err, "connect()");
+    ERROR_HELPER(err, "Error in connect()");
 
     send_packet(sockfd, nickname, NICKNAME_SIZE);
     if (joining) {
@@ -104,10 +104,12 @@ int main(int argc, char const *argv[]) {
     }
     send_packet(sockfd, channel, CHNAME_SIZE);
 
-    pthread_create(&threads[0], NULL, send_msg, (void*) sockfd);
-    pthread_create(&threads[1], NULL, recv_msg, (void*) sockfd);
-    pthread_join(threads[0], NULL);
-    pthread_join(threads[1], NULL);
+    err = pthread_create(&threads[0], NULL, send_msg, (void*) sockfd);
+    err |= pthread_create(&threads[1], NULL, recv_msg, (void*) sockfd);
+    PTHREAD_ERROR_HELPER(err, "Error creating communication threads");
+    err = pthread_join(threads[0], NULL);
+    err |= pthread_join(threads[1], NULL);
+    PTHREAD_ERROR_HELPER(err, "Error joining communication threads");
 
     err = close(sockfd);
     ERROR_HELPER(err, "Could not close socket in client:main");
@@ -166,8 +168,6 @@ void* recv_msg(void* args) {
             pthread_exit(NULL);
         }
         LOGd("Received message from server: ");
-        //message[MSG_SIZE-1] = '\0';
-        //if(strlen(message) == 0) continue;
         message[strlen(message)-1] = '\0';
         printf("%s\n", message);
         memset(message, 0, MSG_SIZE);

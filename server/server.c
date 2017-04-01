@@ -67,8 +67,8 @@ int remove_user(user_t user, int ch_indx) {
         if(strcmp(user.nickname, channels[ch_indx]->ch_users[i]->nickname)==0) {
             // TODO: terminate user's thread
             channels[ch_indx]->ch_users[i] = NULL;
-            LOGi("Removed user");
-            LOGe(user.nickname);
+            LOGd("Removed user:");
+            LOGd(user.nickname);
             return 0;
         }
     }
@@ -122,7 +122,7 @@ msg_t* dequeue(int ch_indx) {
  */
 void* broadcast_routine(void* args) {
     int ch_indx= (int) args;
-    LOGi("About to broadcast messages from broadcast_routine");
+    LOGd("About to broadcast messages from broadcast_routine");
     pthread_setcanceltype(PTHREAD_CANCEL_ASYNCHRONOUS, NULL);
     // terminate thread as soon as requested
     while(1){
@@ -165,9 +165,10 @@ int init_channel(char* channel_name) {
             num_channels++;
             // unlock semaphore before creating thread and exiting the function
             mutex_unlock(init_channel_mutex, 0);
-            pthread_create(&(channels[i]->broadcast_thread),
+            int err = pthread_create(&(channels[i]->broadcast_thread),
                             NULL, broadcast_routine, (void*) i);
-            pthread_detach(channels[i]->broadcast_thread);
+            err |= pthread_detach(channels[i]->broadcast_thread);
+            PTHREAD_ERROR_HELPER(err,"Error creating thread in init_channel()");
             return i;
         }
     }
@@ -178,14 +179,15 @@ int init_channel(char* channel_name) {
 int delete_channel(int ch_indx) {
     msg_t* alert_msg = malloc(sizeof(msg_t));
     sprintf(alert_msg->nickname, "%s", channels[ch_indx]->ch_owner);
-    sprintf(alert_msg->data, "%s", "Sorry, I deleted this channel! Send :leave to leave the channel|");
+    sprintf(alert_msg->data, "%s",
+            "Sorry, I deleted this channel! Send :leave to leave the channel|");
     if(channels[ch_indx] != NULL) {
         enqueue(alert_msg, ch_indx);
         sleep(1);
         pthread_cancel(channels[ch_indx]->broadcast_thread);
         free(channels[ch_indx]);
         channels[ch_indx] = NULL;
-        LOGi("Channel deleted!");
+        LOGd("Channel deleted!");
     }
     return 0;
 }
@@ -247,17 +249,17 @@ void* user_main(void* args) {
 
     int err;
     recv_packet(user->socket, user->nickname, NICKNAME_SIZE);
-    LOGi("Received nickname");
+    LOGd("Received nickname");
 
     char command[COMMAND_SIZE];
     recv_packet(user->socket, command, COMMAND_SIZE);
-    LOGi("Received command");
+    LOGd("Received command");
 
     if (strcmp(command, ":join") == 0) {
         char channel_name[CHNAME_SIZE];
         recv_packet(user->socket, channel_name, CHNAME_SIZE);
-        LOGi("Received channel name");
-        LOGi(channel_name);
+        LOGd("Received channel name");
+        LOGd(channel_name);
         int ch_indx = find_ch_byname(channel_name);
         if(ch_indx < 0) {
             // send channel not existent message and listen to new command
@@ -266,19 +268,19 @@ void* user_main(void* args) {
             pthread_exit(NULL);
         } else {
             add_user(user, ch_indx);
-            LOGi("New user joined");
+            LOGd("New user joined");
             dialogue(user, ch_indx, 0);
         }
 
     } else if (strcmp(command, ":create") == 0) {
         char channel_name[CHNAME_SIZE];
         recv_packet(user->socket, channel_name, CHNAME_SIZE);
-        LOGi("Received new channel name");
-        LOGi(channel_name);
+        LOGd("Received new channel name");
+        LOGd(channel_name);
         int ch_indx = init_channel(channel_name);
         add_owner(user, ch_indx);
         add_user(user, ch_indx);
-        LOGi("Added new user");
+        LOGd("Added new user");
         dialogue(user, ch_indx, 1);
     }
 
@@ -310,15 +312,15 @@ void smooth_exit(int unused1, siginfo_t *info, void *unused2) {
     for (int i=0; i<MAX_CHANNELS; i++) {
         if(channels[i] != NULL) {
             pthread_cancel(channels[i]->broadcast_thread);
-            for (int j=0; j<QUEUE_SIZE; j++) {
-                if(channels[i]->ch_queue[j] != NULL) {
-                    //free(channels[i]->ch_queue[j]);
+            for (int j=0; j<MAX_CH_USERS; j++) {
+                if(channels[i]->ch_users[j] != NULL) {
+                    int err = close(channels[i]->ch_users[j]->socket);
+                    ERROR_HELPER(err, "Error closing socket in smooth_exit()");
                 }
             }
             free(channels[i]);
         }
     }
-    // close all descriptors
 
     // close all semaphores
     sem_close(add_user_mutex);
@@ -327,8 +329,6 @@ void smooth_exit(int unused1, siginfo_t *info, void *unused2) {
     sem_close(fill_sem);
     sem_close(empty_sem);
     sem_close(init_channel_mutex);
-    // and?
-    //TODO: close sockets
 
     exit(EXIT_FAILURE);
 }
@@ -440,10 +440,11 @@ int main(int argc, char const *argv[]) {
         client_desc = accept(server_desc,
                              (struct sockaddr*) client_addr,
                              &client_addr_len);
-
+        if(client_desc < 0) continue;
         pthread_t user_thread;
-        pthread_create(&user_thread, NULL, user_main, (void*) client_desc);
-        pthread_detach(user_thread);
+        err = pthread_create(&user_thread, NULL, user_main, (void*) client_desc);
+        err |= pthread_detach(user_thread);
+        PTHREAD_ERROR_HELPER(err, "Error creating threads in main loop");
         client_addr = calloc(1,sizeof(struct sockaddr_in));
      }
 
