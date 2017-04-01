@@ -301,7 +301,7 @@ void smooth_exit(int unused1, siginfo_t *info, void *unused2) {
     sprintf(signal_caught_msg,
             "Caught signal: %s\n",
             strsignal(info->si_signo));
-    LOGi(signal_caught_msg);
+    //replace eith write() LOGi(signal_caught_msg);
     // alert all connected clients
     msg_t* alert_msg = malloc(sizeof(msg_t));
     sprintf(alert_msg->nickname, "%s", "MyChannel");
@@ -312,7 +312,7 @@ void smooth_exit(int unused1, siginfo_t *info, void *unused2) {
         }
     }
     sleep(1);
-    // free all structures
+    // close all sockets
     for (int i=0; i<MAX_CHANNELS; i++) {
         if(channels[i] != NULL) {
             pthread_cancel(channels[i]->broadcast_thread);
@@ -352,9 +352,15 @@ void sigsegv_exit(int unused1, siginfo_t *info, void *unused2) {
 void handle_signal(int signal, void (*handler)(int, siginfo_t *, void *)) {
     // use sigaction
     struct sigaction act;
+    sigset_t block_mask;
+
+    sigemptyset (&block_mask);
+    /* Block other terminal-generated signals while handler runs. */
+    sigaddset (&block_mask, SIGINT);
+    sigaddset (&block_mask, SIGQUIT);
     act.sa_sigaction = handler;
     act.sa_flags = SA_SIGINFO;
-    act.sa_mask  = mask;
+    act.sa_mask  = block_mask;
     int err = sigaction(signal, &act, NULL); // assign handler to signal
     ERROR_HELPER(err, "Error in handle_signal: sigaction()");
 }
