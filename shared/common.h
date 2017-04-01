@@ -19,7 +19,7 @@
 #ifdef __APPLE__
 #else
   #define _GNU_SOURCE
-  #define _POSIX_C_SOURCE=199309L
+  #define _POSIX_C_SOURCE 199309L
 #endif
 
 #define GENERIC_ERROR_HELPER(cond, errCode, msg) do {               \
