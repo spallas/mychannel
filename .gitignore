@@ -32,5 +32,8 @@
 *.dSYM/
 *.su
 
+# Debug logs
+*.txt
+
 #macOS
 .DS_Store

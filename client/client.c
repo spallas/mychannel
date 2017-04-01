@@ -53,6 +53,20 @@ int main(int argc, char const *argv[]) {
     handle_signal(SIGILL, smooth_exit);
     handle_signal(SIGSEGV,sigsegv_exit);
 
+    unsigned short server_port = htons(SERVER_PORT);
+
+    sockfd = socket(AF_INET, SOCK_STREAM, 0);
+    ERROR_HELPER(sockfd, "socket()");
+
+    struct sockaddr_in server_addr = {0};
+    int addr_size = sizeof(server_addr);
+    server_addr.sin_family = AF_INET;
+    server_addr.sin_port   = server_port;
+    inet_aton(SERVER_IP, &server_addr.sin_addr);
+
+    err = connect(sockfd, (struct sockaddr*) &server_addr, addr_size);
+    ERROR_HELPER(err, "Error in connect()");
+
     char nickname[NICKNAME_SIZE];
     printf("Insert your nickname: ");
     readln(nickname, NICKNAME_SIZE);
@@ -75,26 +89,20 @@ int main(int argc, char const *argv[]) {
         }
     }
     char channel[CHNAME_SIZE];
-    if(joining)
+    if(joining) {
         printf("Which channel do you want to join?\n> ");
-    else if(creating)
+        char ch_name[CHNAME_SIZE];
+        recv_packet(sockfd, ch_name, CHNAME_SIZE);
+        while(strcmp(ch_name, "END") != 0) {
+            printf("%s\n", ch_name);
+            memset(ch_name, 0, CHNAME_SIZE);
+            recv_packet(sockfd, ch_name, CHNAME_SIZE);
+        }
+    } else if(creating) {
         printf("What is the name of your new channel?\n> ");
+    }
     readln(channel, CHNAME_SIZE);
     channel[strlen(channel)-1] = '\0';
-
-    unsigned short server_port = htons(SERVER_PORT);
-
-    sockfd = socket(AF_INET, SOCK_STREAM, 0);
-    ERROR_HELPER(sockfd, "socket()");
-
-    struct sockaddr_in server_addr = {0};
-    int addr_size = sizeof(server_addr);
-    server_addr.sin_family = AF_INET;
-    server_addr.sin_port   = server_port;
-    inet_aton(SERVER_IP, &server_addr.sin_addr);
-
-    err = connect(sockfd, (struct sockaddr*) &server_addr, addr_size);
-    ERROR_HELPER(err, "Error in connect()");
 
     send_packet(sockfd, nickname, NICKNAME_SIZE);
     if (joining) {

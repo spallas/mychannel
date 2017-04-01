@@ -10,6 +10,12 @@
 ch_t* channels[MAX_CHANNELS];
 int num_channels;
 
+// send to user when joining a new channel
+char ch_names[MAX_CHANNELS][CHNAME_SIZE];
+
+// users threads, limited by no. of channels and no. of users per channels
+pthread_t user_threads[MAX_CHANNELS*MAX_CH_USERS];
+
 int add_user_mutex;    // correspond to semaphore array
 int add_owner_mutex;
 int init_channel_mutex;
@@ -149,6 +155,9 @@ int init_channel(char* channel_name) {
             num_channels++;
             // unlock semaphore before creating thread and exiting the function
             mutex_unlock(init_channel_mutex, 0);
+            // insert the name in ch_names
+            sprintf(ch_names[i], "%s", channel_name);
+            LOGi("New channel created");
             int err = pthread_create(&(channels[i]->broadcast_thread),
                             NULL, broadcast_routine, (void*) i);
             err |= pthread_detach(channels[i]->broadcast_thread);
@@ -168,7 +177,6 @@ int remove_user(user_t user, int ch_indx) {
     enqueue(alert_msg, ch_indx);
     for (i = 0; i<MAX_CH_USERS; i++) {
         if(strcmp(user.nickname, channels[ch_indx]->ch_users[i]->nickname)==0) {
-            // TODO: terminate user's thread
             channels[ch_indx]->ch_users[i] = NULL;
             LOGd("Removed user");
             LOGd(user.nickname);
@@ -243,6 +251,20 @@ int dialogue(user_t* user, int ch_indx, int is_owner) {
 }
 
 /**
+ * Send a list of currently active channel names retrieving it from the ch_names
+ * matrix.
+ */
+void send_ch_names(int sockfd) {
+    int i;
+    for (i=0; i<MAX_CHANNELS; i++) {
+        if (strcmp(ch_names[i], "") == 0)
+            continue;
+        send_packet(sockfd, ch_names[i], CHNAME_SIZE);
+    }
+    char *thats_all = "END";
+    send_packet(sockfd, thats_all, 32);
+}
+/**
  * Thread function....
  */
 void* user_main(void* args) {
@@ -250,6 +272,8 @@ void* user_main(void* args) {
     user_t user_obj;
     user_t* user = &user_obj;
     user->socket = (int) args;
+
+    pthread_setcanceltype(PTHREAD_CANCEL_ASYNCHRONOUS, NULL);
 
     int err;
     recv_packet(user->socket, user->nickname, NICKNAME_SIZE);
@@ -260,6 +284,8 @@ void* user_main(void* args) {
     LOGd("Received command");
 
     if (strcmp(command, ":join") == 0) {
+        // send list of active channels
+        send_ch_names(user->socket);
         char channel_name[CHNAME_SIZE];
         recv_packet(user->socket, channel_name, CHNAME_SIZE);
         LOGd("Received channel name");
@@ -294,14 +320,16 @@ void* user_main(void* args) {
 }
 
 /**
- * Handles terminating signals
+ * Handles termination signals
  */
 void smooth_exit(int unused1, siginfo_t *info, void *unused2) {
+    int err;
     char signal_caught_msg[32];
     sprintf(signal_caught_msg,
-            "Caught signal: %s\n",
+            "\nCaught signal: %s\n",
             strsignal(info->si_signo));
-    //replace eith write() LOGi(signal_caught_msg);
+    // don't care about errors, info is not vital
+    write(2, signal_caught_msg, 32);
     // alert all connected clients
     msg_t* alert_msg = malloc(sizeof(msg_t));
     sprintf(alert_msg->nickname, "%s", "MyChannel");
@@ -312,20 +340,27 @@ void smooth_exit(int unused1, siginfo_t *info, void *unused2) {
         }
     }
     sleep(1);
-    // close all sockets
+    // terminate all running threads
     for (int i=0; i<MAX_CHANNELS; i++) {
         if(channels[i] != NULL) {
             pthread_cancel(channels[i]->broadcast_thread);
+        }
+    }
+    for (int i = 0; i < MAX_CHANNELS*MAX_CH_USERS; i++) {
+        pthread_cancel(user_threads[i]);
+    }
+    // close all socket and free channel structures
+    for (int i=0; i<MAX_CHANNELS; i++) {
+        if (channels[i] != NULL) {
             for (int j=0; j<MAX_CH_USERS; j++) {
                 if(channels[i]->ch_users[j] != NULL) {
-                    int err = close(channels[i]->ch_users[j]->socket);
-                    ERROR_HELPER(err, "Error closing socket in smooth_exit()");
+                    // don't care about errors
+                    close(channels[i]->ch_users[j]->socket);
                 }
             }
             free(channels[i]);
         }
     }
-
     // close all semaphores
     sem_close(add_user_mutex);
     sem_close(add_owner_mutex);
@@ -429,11 +464,11 @@ int main(int argc, char const *argv[]) {
     server_addr.sin_port        = server_port;
 
     // relate the address just created to the server listening socket
-    bind(server_desc, (struct sockaddr*) &server_addr, sizeof(server_addr));
-
+    err = bind(server_desc, (struct sockaddr*) &server_addr, sizeof(server_addr));
+    ERROR_HELPER(err, "bind()");
     // mark the server socket as listening: it will only issue accept/close
-    listen(server_desc, MAX_PENDING_REQ);
-
+    err = listen(server_desc, MAX_PENDING_REQ);
+    ERROR_HELPER(err, "listen()");
     // declare a variable to hold client address and its length
     // these will be filled by accept
     struct sockaddr_in* client_addr = malloc(sizeof(struct sockaddr_in));
@@ -441,7 +476,7 @@ int main(int argc, char const *argv[]) {
 
     // declare variable for descriptor returned by accept
     int client_desc;
-
+    int ti = 0;
     // in this infinite loop accept new connections
     // upon a connection launch a thread to interpret what the client wants to
     // do between creating a channel and joining a channel
@@ -451,11 +486,16 @@ int main(int argc, char const *argv[]) {
                              (struct sockaddr*) client_addr,
                              &client_addr_len);
         if(client_desc < 0) continue;
-        pthread_t user_thread;
-        err = pthread_create(&user_thread, NULL, user_main, (void*) client_desc);
-        err |= pthread_detach(user_thread);
+        err = pthread_create(&user_threads[ti], NULL, user_main,
+                             (void*) client_desc);
+        err |= pthread_detach(user_threads[ti]);
         PTHREAD_ERROR_HELPER(err, "Error creating threads in main loop");
         client_addr = calloc(1,sizeof(struct sockaddr_in));
+        ti++;
+        if (ti == MAX_CHANNELS*MAX_CH_USERS) {
+            fprintf(stderr, "Max users supported limit violated!\n");
+            exit(EXIT_FAILURE);
+        }
      }
 
      exit(EXIT_SUCCESS);
