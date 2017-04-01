@@ -88,28 +88,27 @@ int main(int argc, char const *argv[]) {
             continue;
         }
     }
+
+    send_packet(sockfd, nickname, NICKNAME_SIZE);
     char channel[CHNAME_SIZE];
     if(joining) {
-        printf("Which channel do you want to join?\n> ");
+        send_packet(sockfd, JOIN_COMMAND, COMMAND_SIZE);
+        printf("Which channel do you want to join?\n");
         char ch_name[CHNAME_SIZE];
         recv_packet(sockfd, ch_name, CHNAME_SIZE);
         while(strcmp(ch_name, "END") != 0) {
-            printf("%s\n", ch_name);
+            printf("- %s\n", ch_name);
             memset(ch_name, 0, CHNAME_SIZE);
             recv_packet(sockfd, ch_name, CHNAME_SIZE);
         }
     } else if(creating) {
-        printf("What is the name of your new channel?\n> ");
+        send_packet(sockfd, CREATE_COMMAND, COMMAND_SIZE);
+        printf("What is the name of your new channel?\n");
     }
+    printf("> ");
     readln(channel, CHNAME_SIZE);
     channel[strlen(channel)-1] = '\0';
-
-    send_packet(sockfd, nickname, NICKNAME_SIZE);
-    if (joining) {
-        send_packet(sockfd, JOIN_COMMAND, COMMAND_SIZE);
-    } else if (creating) {
-        send_packet(sockfd, CREATE_COMMAND, COMMAND_SIZE);
-    }
+    (joining ? printf("Joined!!\n\n") : printf("Created!!\n\n"));
     send_packet(sockfd, channel, CHNAME_SIZE);
 
     err = pthread_create(&threads[0], NULL, send_msg, (void*) sockfd);
