@@ -9,6 +9,16 @@
 
 #include "../shared/common.h"
 
+#ifdef __APPLE__
+#else
+  #ifndef _GNU_SOURCE
+  #define _GNU_SOURCE
+  #endif
+  #ifndef _POSIX_C_SOURCE
+  #define _POSIX_C_SOURCE 199309L
+  #endif
+#endif
+
 // server configuration parameters
 #define SERVER_NICKNAME     "mychannel"
 #define MAX_CH_USERS        128

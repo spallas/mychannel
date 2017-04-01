@@ -324,12 +324,12 @@ void* user_main(void* args) {
  */
 void smooth_exit(int unused1, siginfo_t *info, void *unused2) {
     int err;
-    char signal_caught_msg[32];
+    char signal_caught_msg[32] = {0};
     sprintf(signal_caught_msg,
             "\nCaught signal: %s\n",
             strsignal(info->si_signo));
     // don't care about errors, info is not vital
-    write(2, signal_caught_msg, 32);
+    write(2, signal_caught_msg, strlen(signal_caught_msg));
     // alert all connected clients
     msg_t* alert_msg = malloc(sizeof(msg_t));
     sprintf(alert_msg->nickname, "%s", "MyChannel");
@@ -349,15 +349,9 @@ void smooth_exit(int unused1, siginfo_t *info, void *unused2) {
     for (int i = 0; i < MAX_CHANNELS*MAX_CH_USERS; i++) {
         pthread_cancel(user_threads[i]);
     }
-    // close all socket and free channel structures
+    // free channel structures
     for (int i=0; i<MAX_CHANNELS; i++) {
         if (channels[i] != NULL) {
-            for (int j=0; j<MAX_CH_USERS; j++) {
-                if(channels[i]->ch_users[j] != NULL) {
-                    // don't care about errors
-                    close(channels[i]->ch_users[j]->socket);
-                }
-            }
             free(channels[i]);
         }
     }
