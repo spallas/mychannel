@@ -323,13 +323,13 @@ void* user_main(void* args) {
  * Handles termination signals
  */
 void smooth_exit(int unused1, siginfo_t *info, void *unused2) {
-    int err;
     char signal_caught_msg[32] = {0};
     sprintf(signal_caught_msg,
             "\nCaught signal: %s\n",
             strsignal(info->si_signo));
     // don't care about errors, info is not vital
     write(2, signal_caught_msg, strlen(signal_caught_msg));
+    write(1, "\n", 1);
     // alert all connected clients
     msg_t* alert_msg = malloc(sizeof(msg_t));
     sprintf(alert_msg->nickname, "%s", "MyChannel");
@@ -363,6 +363,8 @@ void smooth_exit(int unused1, siginfo_t *info, void *unused2) {
     sem_close(empty_sem);
     sem_close(init_channel_mutex);
 
+    log_save();
+
     exit(EXIT_FAILURE);
 }
 
@@ -370,11 +372,12 @@ void smooth_exit(int unused1, siginfo_t *info, void *unused2) {
  * Handles SIGSEGV signal
  */
 void sigsegv_exit(int unused1, siginfo_t *info, void *unused2) {
-    // alert all connected clients
-    // free all structures
-    // close all descriptors
-    // log info about memory
-    // and?
+    unsigned int address;
+    address = *(unsigned int*) &(info->si_addr);
+    char msg[64];
+    sprintf(msg, "segfault occurred (address is %x)\n", address);
+    LOGe(msg);
+    smooth_exit(unused1, info, unused2);
 }
 
 
@@ -397,6 +400,7 @@ void handle_signal(int signal, void (*handler)(int, siginfo_t *, void *)) {
 
 int main(int argc, char const *argv[]) {
 
+    log_init();
     LOGi("Server started");
     printf("process: %d\n", getpid());
 
@@ -428,8 +432,6 @@ int main(int argc, char const *argv[]) {
     handle_signal(SIGHUP, smooth_exit);
     handle_signal(SIGILL, smooth_exit);
     handle_signal(SIGSEGV,sigsegv_exit);
-
-
 
     // initialize semaphores
     add_user_mutex     = mutex_init(MAX_CHANNELS);

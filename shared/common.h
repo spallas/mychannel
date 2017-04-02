@@ -4,6 +4,7 @@
 
 #include <arpa/inet.h>
 #include <errno.h>
+#include <fcntl.h>
 #include <netinet/in.h>
 #include <pthread.h>
 #include <stdio.h>
@@ -11,10 +12,13 @@
 #include <string.h>
 #include <signal.h>
 #include <sys/socket.h>
+#include <sys/types.h>
+#include <sys/stat.h>
 #include <unistd.h>
 
 #include "protocol.h"
 #include "semaphore.h"
+#include "log.h"
 
 #ifdef __APPLE__
 #else
@@ -22,24 +26,20 @@
   #define _POSIX_C_SOURCE 199309L
 #endif
 
-#define GENERIC_ERROR_HELPER(cond, errCode, msg) do {               \
-        if (cond) {                                                 \
-            fprintf(stderr, "%s: %s\n", msg, strerror(errCode));    \
-            exit(EXIT_FAILURE);                                     \
-        }                                                           \
+#define GENERIC_ERROR_HELPER(cond, errCode, msg) do {  \
+        if (cond) {                                    \
+            perror(msg);                               \
+            exit(EXIT_FAILURE);                        \
+        }                                              \
     } while(0)
 
 #define ERROR_HELPER(ret, msg)         GENERIC_ERROR_HELPER((ret<0), errno, msg)
 #define PTHREAD_ERROR_HELPER(ret, msg) GENERIC_ERROR_HELPER((ret!=0), ret, msg)
 
-#define LOGi(info) do { fprintf(stdout, "[INFO]: %s\n", info); } while(0)
-#define LOGe(info) do { fprintf(stderr, "[ERROR]: %s\n", info); } while(0)
+#define LOGi(info) log_info(info);
+#define LOGe(info) log_error(info);
+#define LOGd(info) log_debug(info);
 
-#ifdef DEBUG
-#define LOGd(info) do { fprintf(stderr, "[DEBUG]: %s\n", info); } while(0)
-#else
-#define LOGd(info)
-#endif
 
 // message config parameters
 #define MSG_SIZE            1024

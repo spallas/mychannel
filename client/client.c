@@ -22,7 +22,7 @@ int joining = 0;
 int creating = 0;
 
 int main(int argc, char const *argv[]) {
-
+    log_init_name("./client/.client_log.txt");
     int err = 0;
     // mask is a global variable
     err |= sigemptyset(&mask);
@@ -212,11 +212,17 @@ void smooth_exit(int unused1, siginfo_t *info, void *unused2) {
     int err = close(sockfd);
     ERROR_HELPER(err, "Could not close socket in client:smooth_exit");
     printf("\nBye! C you soon!\n");
+    log_save();
     exit(0);
 }
 
 
 void sigsegv_exit(int unused1, siginfo_t *info, void *unused2) {
+    unsigned int address;
+    address = *(unsigned int*) &(info->si_addr);
+    char msg[64];
+    sprintf(msg, "segfault occurred (address is %x)\n", address);
+    LOGe(msg);
     pthread_cancel(threads[0]);
     pthread_cancel(threads[1]);
     pthread_join(threads[0], NULL);
