@@ -28,8 +28,10 @@
 
 #define GENERIC_ERROR_HELPER(cond, errCode, msg) do {  \
         if (cond) {                                    \
-            perror(msg);                               \
-            exit(EXIT_FAILURE);                        \
+            perror(msg);
+            /* do not kill the entire process
+               but only the involved thread */         \
+            pthread_exit(NULL);                        \
         }                                              \
     } while(0)
 
