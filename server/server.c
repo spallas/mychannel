@@ -212,6 +212,7 @@ int delete_channel(int ch_indx) {
 int find_ch_byname(char* name) {
     int i;
     for (i = 0; i < MAX_CHANNELS; i++) {
+        if(channels[i] == NULL || channels[i]->ch_name == NULL) continue;
         if(strcmp(channels[i]->ch_name, name) == 0) return i;
     }
     return -1;
