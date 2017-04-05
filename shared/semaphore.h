@@ -5,6 +5,8 @@
 #include <string.h>
 #include <errno.h>
 
+#include "common.h"
+
 #ifndef _SEMAPHORE_H_
 
 #ifdef __APPLE__

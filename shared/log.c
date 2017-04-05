@@ -21,7 +21,7 @@ void log_init() {
 void log_init_name(char *filename) {
     logfd = open(filename, O_WRONLY | O_APPEND | O_CREAT, 0600);
     if(logfd<0 && errno == EEXIST) return;
-    ERROR_HELPER(logfd, "Unable to open log file");
+    ERROR_HELPER(logfd, "Unable to open log filewith name");
     close(2);
     int err = dup(logfd);
     ERROR_HELPER(err, "Unable to redirect stderr in log_init()");
@@ -59,7 +59,7 @@ void log_error(char* info) {
     err |= sigfillset(&set);
 	err |= sigprocmask(SIG_BLOCK, &set, NULL);
 
-    fprintf(stderr, "[ERROR]: %s\n", info);
+    fprintf(stderr, "[ERROR]: %s: %s\n", info, strerror(errno));
 
     err |= sigprocmask(SIG_UNBLOCK, &set, NULL);
     if(err != 0) fprintf(stderr, "%s: %s\n", "Logger error", strerror(errno));

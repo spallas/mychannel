@@ -3,6 +3,7 @@
 #define _COMMON_H_
 
 #include <arpa/inet.h>
+#include <assert.h>
 #include <errno.h>
 #include <fcntl.h>
 #include <netinet/in.h>
@@ -28,7 +29,7 @@
 
 #define GENERIC_ERROR_HELPER(cond, errCode, msg) do {  \
         if (cond) {                                    \
-            perror(msg);
+            LOGe(msg);                                 \
             /* do not kill the entire process
                but only the involved thread */         \
             pthread_exit(NULL);                        \
