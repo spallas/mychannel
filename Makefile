@@ -2,7 +2,7 @@ CC = gcc -std=c99
 # -D_GNU_SOURCE -D_POSIX_C_SOURCE=199309L
 # uncomment when compiling for linux
 CC-DEBUG = $(CC) -Wall -ggdb -DDEBUG
-CC-RELEASE = $(CC) -g -fsanitize=address #-O3
+CC-RELEASE = $(CC) -O3 #-fsanitize=address
 LDFLAGS = -lpthread
 
 all: client server
