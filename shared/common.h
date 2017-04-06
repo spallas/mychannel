@@ -57,12 +57,14 @@
 // each command starts with :
 #define JOIN_COMMAND        ":join"   // join <?> channel
 #define LEAVE_COMMAND       ":leave"  // leave a channel but stay in the program
-#define QUIT_COMMAND        ":quit"   // performs leave & quit
-#define LIST_COMMAND        ":list"   // list channel users
 #define CREATE_COMMAND      ":create" // creaete new channel
 #define DELETE_COMMAND      ":delete" // deletes a channel
+/*
+#define QUIT_COMMAND        ":quit"   // performs leave & quit
+#define LIST_COMMAND        ":list"   // list channel users
 #define STATS_COMMAND       ":stats"
 #define HELP_COMMAND        ":help"
+*/
 
 
 #endif

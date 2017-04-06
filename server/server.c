@@ -484,7 +484,7 @@ int main(int argc, char const *argv[]) {
         if(client_desc < 0) continue;
         err = pthread_create(&user_threads[ti], NULL, user_main,
                              (void*) client_desc);
-        err |= pthread_detach(user_threads[ti]);
+        err|= pthread_detach(user_threads[ti]);
         PTHREAD_ERROR_HELPER(err, "Error creating threads in main loop");
         client_addr = calloc(1,sizeof(struct sockaddr_in));
         ti++;

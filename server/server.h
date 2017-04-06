@@ -40,7 +40,7 @@ typedef struct user_s {
 // channel data structure
 typedef struct ch_s {
     char ch_owner[NICKNAME_SIZE];
-    char   ch_name[CHNAME_SIZE];
+    char ch_name[CHNAME_SIZE];
     user_t* ch_users[MAX_CH_USERS];
     int    num_users;
     msg_t*   ch_queue[QUEUE_SIZE];
