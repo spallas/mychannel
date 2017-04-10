@@ -176,6 +176,7 @@ int remove_user(user_t user, int ch_indx) {
     sprintf(alert_msg->data, "%s", "I'm leaving the channel. Bye folks!|");
     enqueue(alert_msg, ch_indx);
     for (i = 0; i<MAX_CH_USERS; i++) {
+        if(channels[ch_indx]->ch_users[i] == NULL) continue;
         if(strcmp(user.nickname, channels[ch_indx]->ch_users[i]->nickname)==0) {
             channels[ch_indx]->ch_users[i] = NULL;
             LOGd("Removed user");
@@ -233,11 +234,11 @@ int dialogue(user_t* user, int ch_indx, int is_owner) {
     while(1) {
         msg_t* message = malloc(sizeof(msg_t));
         sprintf(message->nickname, "%s", user->nickname);
-        recv_stream(user->socket, message->data, MSG_SIZE);
-        if(strcmp(message->data, leave_msg) == 0) {
+        int ret = recv_stream(user->socket, message->data, MSG_SIZE);
+        if(strcmp(message->data, leave_msg) == 0  || ret == 0) {
             remove_user(*user, ch_indx);
             break;
-        } else if (strcmp(message->data, delete_msg) == 0) {
+        } else if (strcmp(message->data, delete_msg) == 0 || ret == 0) {
             // delete ch_indx channel only if this is the creator
             if(is_owner){
                 LOGd("About to delete a channel...");
