@@ -52,14 +52,8 @@ int add_user(user_t* user, int ch_indx) {
 
 
 
-int has_owner(int ch_indx) {
-    return strcmp(channels[ch_indx]->ch_owner, "");
-}
-
-
 
 int add_owner(user_t* owner, int ch_indx) {
-    if(has_owner(ch_indx)) return -1;
     mutex_lock(add_owner_mutex, ch_indx);
     strncpy(channels[ch_indx]->ch_owner, owner->nickname, NICKNAME_SIZE);
     mutex_unlock(add_owner_mutex, ch_indx);
