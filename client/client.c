@@ -111,8 +111,9 @@ int main(int argc, char const *argv[]) {
     (joining ? printf("Joined!!\n\n") : printf("Created!!\n\n"));
     send_packet(sockfd, channel, CHNAME_SIZE);
 
-    err = pthread_create(&threads[0], NULL, send_msg, (void*) sockfd);
-    err |= pthread_create(&threads[1], NULL, recv_msg, (void*) sockfd);
+
+    err = pthread_create(&threads[1], NULL, recv_msg, (void*) sockfd);
+    err |= pthread_create(&threads[0], NULL, send_msg, (void*) sockfd);
     PTHREAD_ERROR_HELPER(err, "Error creating communication threads");
     err = pthread_join(threads[0], NULL);
     err |= pthread_join(threads[1], NULL);
@@ -126,6 +127,7 @@ int main(int argc, char const *argv[]) {
 
 
 void* send_msg(void* args) {
+    sleep(1);
     int sockfd = (int) args;
     char message[MSG_SIZE] = {0};
 
@@ -211,7 +213,7 @@ void smooth_exit(int unused1, siginfo_t *info, void *unused2) {
     send_stream(sockfd, leave_msg, MSG_SIZE);
     int err = close(sockfd);
     ERROR_HELPER(err, "Could not close socket in client:smooth_exit");
-    printf("\nBye! C you soon!\n");
+    write(1, "\nBye! C you soon!\n", 18);
     log_save();
     exit(0);
 }
@@ -231,6 +233,6 @@ void sigsegv_exit(int unused1, siginfo_t *info, void *unused2) {
     send_stream(sockfd, leave_msg, MSG_SIZE);
     int err = close(sockfd);
     ERROR_HELPER(err, "Could not close socket in client:sigsegv_exit");
-    printf("\nBye! C you soon!\n");
+    write(1, "\nBye! C you soon!\n", 18);
     exit(0);
 }
