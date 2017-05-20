@@ -33,7 +33,6 @@ int main(int argc, char const *argv[]) {
     err |= sigdelset(&mask, SIGHUP);
     err |= sigdelset(&mask, SIGPIPE);
     err |= sigdelset(&mask, SIGSEGV);
-    err |= sigdelset(&mask, SIGUSR1);
     err |= pthread_sigmask(SIG_BLOCK, &mask, NULL);
 
     if(err != 0) {
@@ -130,7 +129,7 @@ void* send_msg(void* args) {
     sleep(1);
     int sockfd = (int) args;
     char message[MSG_SIZE] = {0};
-
+    int err;
     char leave_msg[COMMAND_SIZE];
     sprintf(leave_msg, "%s%c", LEAVE_COMMAND, MSG_DELIMITER_CHAR);
     char delete_msg[COMMAND_SIZE];
@@ -140,18 +139,25 @@ void* send_msg(void* args) {
     while(1) {
         readln(message, MSG_SIZE);
         if(strcmp(message, "") == 0) continue;
-        if((strcmp(message, delete_msg) == 0 || strcmp(message, leave_msg) == 0) && creating) {
+        if((strcmp(message, delete_msg) == 0
+            || strcmp(message, leave_msg) == 0) && creating)
+        {
             printf("Leaving the channel...\n");
             printf("Telling MyChannel to delete the channel...\n");
             delete = 1;
             pthread_cancel(threads[1]);
             break;
-        }else if(strcmp(message, leave_msg) == 0) {
+        } else if(strcmp(message, leave_msg) == 0) {
             printf("Leaving the channel...\n");
             pthread_cancel(threads[1]);
             break;
         }
-        send_stream(sockfd, message, MSG_SIZE);
+        err = send_stream(sockfd, message, MSG_SIZE);
+        if(err == EPIPE) {
+            printf("MyChannel servers are issuing problems...\n");
+            fflush(stdout);
+            pthread_exit(NULL);
+        }
         LOGd("Sent message to server...");
         memset(message, 0, MSG_SIZE);
     }

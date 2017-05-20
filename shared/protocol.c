@@ -20,18 +20,19 @@ void send_packet(int sockfd, char* buff, int packet_size) {
     }
 }
 
-void send_stream(int sockfd, char* buff, int max_msg_size) {
+int send_stream(int sockfd, char* buff, int max_msg_size) {
     int sent_bytes = 0;
     int bytes_left = max_msg_size;
     while(bytes_left) {
         int ret = send(sockfd, buff + sent_bytes, 1, 0);
         if(ret == -1 && errno == EINTR) continue;
-        if(ret == EPIPE) break;
+        if(ret == -1 && errno == EPIPE) return EPIPE;
         ERROR_HELPER(ret, "Could not write to socket in send_stream");
         sent_bytes += ret;
         bytes_left -= ret;
         if(buff[sent_bytes-1] == MSG_DELIMITER_CHAR) break;
     }
+    return 0;
 }
 
 void recv_packet(int sockfd, char* buff, int packet_size) {

@@ -40,41 +40,6 @@ int isFree(int ch_indx) {
 }
 
 /**
- * Puts the user in the channel number ch_indx.
- * The number of users in the channel grows.
- * @param user: the user to insert in the channel
- * @param ch_indx: the index of the chennel where to put the new user
- * @return 0 on success, 1 if max number of user for the channel reached
- */
-int add_user(user_t* user, int ch_indx) {
-    if(ch_indx >= MAX_CHANNELS) return -1;
-    if(channels[ch_indx]->num_users >= MAX_CH_USERS) return -1;
-    int i;
-    mutex_lock(add_user_mutex, ch_indx);
-    for (i=0; i<MAX_CH_USERS; i++) {
-        if(channels[ch_indx]->ch_users[i] == NULL) {
-            channels[ch_indx]->ch_users[i] = user;
-            channels[ch_indx]->num_users++;
-            mutex_unlock(add_user_mutex, ch_indx);
-            return 0;
-        }
-    }
-    ERROR_HELPER(-1, "Inconsistency in num_users");
-    return -1;
-}
-
-
-
-
-int add_owner(user_t* owner, int ch_indx) {
-    mutex_lock(add_owner_mutex, ch_indx);
-    strncpy(channels[ch_indx]->ch_owner, owner->nickname, NICKNAME_SIZE);
-    mutex_unlock(add_owner_mutex, ch_indx);
-    return 0;
-}
-
-
-/**
  * Add a message to the queue of messages that were sent to the ch_indx
  * channel.
  * @param message: the message to be enqueued
@@ -113,6 +78,59 @@ msg_t* dequeue(int ch_indx) {
 }
 
 /**
+ * Puts the user in the channel number ch_indx.
+ * The number of users in the channel grows.
+ * @param user: the user to insert in the channel
+ * @param ch_indx: the index of the chennel where to put the new user
+ * @return 0 on success, 1 if max number of user for the channel reached
+ */
+int add_user(user_t* user, int ch_indx) {
+    if(ch_indx >= MAX_CHANNELS) return -1;
+    if(channels[ch_indx]->num_users >= MAX_CH_USERS) return -1;
+    int i;
+    mutex_lock(add_user_mutex, ch_indx);
+    for (i=0; i<MAX_CH_USERS; i++) {
+        if(channels[ch_indx]->ch_users[i] == NULL) {
+            channels[ch_indx]->ch_users[i] = user;
+            channels[ch_indx]->num_users++;
+            mutex_unlock(add_user_mutex, ch_indx);
+            return 0;
+        }
+    }
+    ERROR_HELPER(-1, "Inconsistency in num_users");
+    return -1;
+}
+
+
+int remove_user(user_t user, int ch_indx) {
+    int i;
+    msg_t* alert_msg = malloc(sizeof(msg_t));
+    sprintf(alert_msg->nickname, "%s", user.nickname);
+    sprintf(alert_msg->data, "%s", "I'm leaving the channel. Bye folks!|");
+    enqueue(alert_msg, ch_indx);
+    for (i = 0; i<MAX_CH_USERS; i++) {
+        if(channels[ch_indx]->ch_users[i] == NULL) continue;
+        if(strcmp(user.nickname, channels[ch_indx]->ch_users[i]->nickname)==0) {
+            channels[ch_indx]->ch_users[i] = NULL;
+            LOGd("Removed user");
+            LOGd(user.nickname);
+            return 0;
+        }
+    }
+    LOGe(user.nickname);
+    LOGe("User not found");
+    return -1;
+}
+
+
+int add_owner(user_t* owner, int ch_indx) {
+    mutex_lock(add_owner_mutex, ch_indx);
+    strncpy(channels[ch_indx]->ch_owner, owner->nickname, NICKNAME_SIZE);
+    mutex_unlock(add_owner_mutex, ch_indx);
+    return 0;
+}
+
+/**
  * Get a message from the current queue and send it to all users in a channel;
  * Function executed by thread ....
  * @param args: pointer that casted to an int contains the channel index
@@ -133,7 +151,11 @@ void* broadcast_routine(void* args) {
             strncpy(buff, msg->nickname, NICKNAME_SIZE);
             strncat(buff, ": ", 2);
             strncat(buff, msg->data, MSG_SIZE);
-            send_stream(channels[ch_indx]->ch_users[i]->socket, buff, total_size);
+            int err = send_stream(channels[ch_indx]->ch_users[i]->socket,
+                                  buff, total_size);
+            if(err == EPIPE) { // remove user
+                remove_user(*(channels[ch_indx]->ch_users[i]), ch_indx);
+            }
             free(buff);
         }
         free(msg);
@@ -157,7 +179,7 @@ int init_channel(char* channel_name) {
             if(channels[i] == NULL) break; // free channel slot found
     }
     if(i == MAX_CHANNELS)
-        ERROR_HELPER(-1, "Incosistency in num_channels variable");
+        return -1;
     // create the channel
     channels[i] = calloc(1, sizeof(ch_t));
     if(channels[i] == NULL)
@@ -181,26 +203,6 @@ int init_channel(char* channel_name) {
     return i;
 }
 
-
-int remove_user(user_t user, int ch_indx) {
-    int i;
-    msg_t* alert_msg = malloc(sizeof(msg_t));
-    sprintf(alert_msg->nickname, "%s", user.nickname);
-    sprintf(alert_msg->data, "%s", "I'm leaving the channel. Bye folks!|");
-    enqueue(alert_msg, ch_indx);
-    for (i = 0; i<MAX_CH_USERS; i++) {
-        if(channels[ch_indx]->ch_users[i] == NULL) continue;
-        if(strcmp(user.nickname, channels[ch_indx]->ch_users[i]->nickname)==0) {
-            channels[ch_indx]->ch_users[i] = NULL;
-            LOGd("Removed user");
-            LOGd(user.nickname);
-            return 0;
-        }
-    }
-    LOGe(user.nickname);
-    LOGe("User not found");
-    return -1;
-}
 
 int delete_channel(int ch_indx) {
     msg_t* alert_msg = malloc(sizeof(msg_t));
@@ -265,7 +267,6 @@ int dialogue(user_t* user, int ch_indx, int is_owner) {
         }
         if(strcmp(message->data, "") == 0) break;
         enqueue(message, ch_indx);
-
     }
     return 0;
 }
@@ -312,9 +313,7 @@ void* user_main(void* args) {
         LOGd(channel_name);
         int ch_indx = find_ch_byname(channel_name);
         if(ch_indx < 0) {
-            // send channel not existent message and listen to new command
-            char *error_message = "MyChannel: sorry your channel could not be found.|";
-            send_stream(user->socket, error_message, strlen(error_message));
+            send_stream(user->socket,ERR_CH_NOT_FOUND,strlen(ERR_CH_NOT_FOUND));
         } else {
             add_user(user, ch_indx);
             LOGd("New user joined");
@@ -328,13 +327,11 @@ void* user_main(void* args) {
         LOGd(channel_name);
         int ch_indx = init_channel(channel_name);
         if(ch_indx < 0) {
-            // send channel not existent message and listen to new command
-            char *error_message = ERR_TOO_MANY_CH;
-            send_stream(user->socket, error_message, strlen(error_message));
+            send_stream(user->socket, ERR_TOO_MANY_CH, strlen(ERR_TOO_MANY_CH));
         } else {
             add_owner(user, ch_indx);
             add_user(user, ch_indx);
-            LOGd("Added new user");
+            LOGd("Added new owner and user for new channel");
             dialogue(user, ch_indx, 1);
         }
     }
