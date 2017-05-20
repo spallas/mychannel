@@ -7,14 +7,20 @@
 #define SERVER_PORT 8500
 #define MAX_PENDING_REQ 3
 
+#define SET_BIT(mask, n)   do { mask |= 1 << n; } while(0)
+#define CLEAR_BIT(mask, n) do { mask &= ~(1 << n); } while(0)
+
 ch_t* channels[MAX_CHANNELS];
 int num_channels;
+
+int ch_bitmask;
+int last_free_ch = 1;
 
 // send to user when joining a new channel
 char ch_names[MAX_CHANNELS][CHNAME_SIZE];
 
 // users threads, limited by no. of channels and no. of users per channels
-pthread_t user_threads[MAX_CHANNELS*MAX_CH_USERS*100];
+pthread_t user_threads[MAX_CHANNELS*MAX_CH_USERS];
 
 int add_user_mutex;    // correspond to semaphore array
 int add_owner_mutex;
@@ -25,6 +31,13 @@ int empty_sem;
 
 sigset_t mask;
 
+/**
+ * Check if the channel in posotion ch_indx is free.
+ */
+int isFree(int ch_indx) {
+    if(ch_indx < 0 || ch_indx >= MAX_CHANNELS) return 0;
+    return (ch_bitmask >> ch_indx) & 1;
+}
 
 /**
  * Puts the user in the channel number ch_indx.
@@ -136,30 +149,36 @@ int init_channel(char* channel_name) {
     if(num_channels == MAX_CHANNELS) return -1;
 
     mutex_lock(init_channel_mutex, 0);
-    int i; // index of the first free channel
-    for (i = 0; i < MAX_CHANNELS; i++) {
-        if(channels[i] == NULL) { // free channel slot found
-            channels[i] = calloc(1, sizeof(ch_t));
-            if(channels[i] == NULL)
-                ERROR_HELPER(-1, "init_channel(): Error allocating memory");
-            sprintf(channels[i]->ch_name, "%s", channel_name);
-            channels[i]->num_users   = 0;
-            channels[i]->read_index  = 0;
-            channels[i]->write_index = 0;
-            num_channels++;
-            // unlock semaphore before creating thread and exiting the function
-            mutex_unlock(init_channel_mutex, 0);
-            // insert the name in ch_names
-            sprintf(ch_names[i], "%s", channel_name);
-            LOGi("New channel created");
-            int err = pthread_create(&(channels[i]->broadcast_thread),
-                            NULL, broadcast_routine, (void*) i);
-            err |= pthread_detach(channels[i]->broadcast_thread);
-            PTHREAD_ERROR_HELPER(err,"Error creating thread in init_channel()");
-            return i;
-        }
+    int i; // index of a free channel
+    if(isFree(last_free_ch)){
+        i = last_free_ch;
+    } else {
+        for (i = 0; i < MAX_CHANNELS; i++)
+            if(channels[i] == NULL) break; // free channel slot found
     }
-    ERROR_HELPER(-1, "Incosistency in num_channels variable");
+    if(i == MAX_CHANNELS)
+        ERROR_HELPER(-1, "Incosistency in num_channels variable");
+    // create the channel
+    channels[i] = calloc(1, sizeof(ch_t));
+    if(channels[i] == NULL)
+        ERROR_HELPER(-1, "init_channel(): Error allocating memory");
+    sprintf(channels[i]->ch_name, "%s", channel_name);
+    channels[i]->num_users   = 0;
+    channels[i]->read_index  = 0;
+    channels[i]->write_index = 0;
+    num_channels++;
+    SET_BIT(ch_bitmask, i);
+    // unlock semaphore before creating thread and exiting the function
+    mutex_unlock(init_channel_mutex, 0);
+
+    // insert the name in ch_names
+    sprintf(ch_names[i], "%s", channel_name);
+    LOGi("New channel created");
+    int err = pthread_create(&(channels[i]->broadcast_thread),
+                    NULL, broadcast_routine, (void*) i);
+    err |= pthread_detach(channels[i]->broadcast_thread);
+    PTHREAD_ERROR_HELPER(err,"Error creating thread in init_channel()");
+    return i;
 }
 
 
@@ -192,9 +211,13 @@ int delete_channel(int ch_indx) {
         enqueue(alert_msg, ch_indx);
         sleep(1);
         pthread_cancel(channels[ch_indx]->broadcast_thread);
+        mutex_lock(init_channel_mutex, 0);
         free(channels[ch_indx]);
         channels[ch_indx] = NULL;
+        CLEAR_BIT(ch_bitmask, ch_indx);
+        last_free_ch = ch_indx;
         num_channels--;
+        mutex_unlock(init_channel_mutex, 0);
         LOGd("Channel deleted!");
     }
     return 0;
@@ -306,7 +329,7 @@ void* user_main(void* args) {
         int ch_indx = init_channel(channel_name);
         if(ch_indx < 0) {
             // send channel not existent message and listen to new command
-            char *error_message = "MyChannel: sorry your channel could not be created, too many channels up here!!|";
+            char *error_message = ERR_TOO_MANY_CH;
             send_stream(user->socket, error_message, strlen(error_message));
         } else {
             add_owner(user, ch_indx);
@@ -354,16 +377,7 @@ void smooth_exit(int unused1, siginfo_t *info, void *unused2) {
     for (int i = 0; i < MAX_CHANNELS*MAX_CH_USERS; i++) {
         pthread_cancel(user_threads[i]);
     }
-    // free channel structures: process is going to terminate: leet the OS make
-    // the cleanup of all the memory. Note that is unsafe to call free() in
-    // a signal handler.
-    /*
-    for (int i=0; i<MAX_CHANNELS; i++) {
-        if (channels[i] != NULL) {
-            free(channels[i]);
-        }
-    }
-    */
+
     // close all semaphores
     sem_close(add_user_mutex);
     sem_close(add_owner_mutex);
@@ -462,6 +476,14 @@ int main(int argc, char const *argv[]) {
                      SO_REUSEADDR, &enable, sizeof(int));
     ERROR_HELPER(err, "setsockopt(SO_REUSEADDR) failed");
 
+    // If the
+    struct timeval tv;
+    tv.tv_sec = 30;  /* 30 Secs Timeout */
+    tv.tv_usec = 0;  // Not init'ing this can cause strange errors
+    err = setsockopt(server_desc, SOL_SOCKET, SO_RCVTIMEO,
+                     (const char*)&tv, sizeof(struct timeval));
+    ERROR_HELPER(err, "server.c -> setsockopt()");
+
     // initialize the server address with port defined above
     struct sockaddr_in server_addr = {0};
     server_addr.sin_addr.s_addr = INADDR_ANY;
@@ -469,7 +491,7 @@ int main(int argc, char const *argv[]) {
     server_addr.sin_port        = server_port;
 
     // relate the address just created to the server listening socket
-    err = bind(server_desc, (struct sockaddr*) &server_addr, sizeof(server_addr));
+    err = bind(server_desc,(struct sockaddr*) &server_addr,sizeof(server_addr));
     ERROR_HELPER(err, "bind()");
     // mark the server socket as listening: it will only issue accept/close
     err = listen(server_desc, MAX_PENDING_REQ);
@@ -486,11 +508,7 @@ int main(int argc, char const *argv[]) {
     // upon a connection launch a thread to interpret what the client wants to
     // do between creating a channel and joining a channel
     while(1) {
-        if (ti == MAX_CHANNELS*MAX_CH_USERS*100) {
-            LOGe("Max number of threads limit violated!");
-            LOGi("Stopped accepting new connections.");
-            pause(); // wait eventual terminating signal...
-        }
+
         LOGi("Accepting new connections...");
         client_desc = accept(server_desc,
                              (struct sockaddr*) client_addr,

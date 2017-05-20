@@ -54,6 +54,8 @@
 //#define COMMAND_CHAR        ':'
 #define COMMAND_SIZE        16
 
+#define ERR_TOO_MANY_CH "MyChannel: sorry your channel could not be created, too many channels up here!!|"
+
 // each command starts with :
 #define JOIN_COMMAND        ":join"   // join <?> channel
 #define LEAVE_COMMAND       ":leave"  // leave a channel but stay in the program
