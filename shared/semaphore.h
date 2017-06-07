@@ -8,6 +8,7 @@
 #include "common.h"
 
 #ifndef _SEMAPHORE_H_
+#define _SEMAPHORE_H_
 
 #ifdef __APPLE__
 #else
