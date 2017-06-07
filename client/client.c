@@ -24,20 +24,6 @@ int creating = 0;
 int main(int argc, char const *argv[]) {
     log_init_name("./client/.client_log.txt");
     int err = 0;
-    // mask is a global variable
-    err |= sigemptyset(&mask);
-    err |= sigfillset(&mask);
-    err |= sigdelset(&mask, SIGTERM);
-    err |= sigdelset(&mask, SIGINT);
-    err |= sigdelset(&mask, SIGQUIT);
-    err |= sigdelset(&mask, SIGSEGV);
-    err |= pthread_sigmask(SIG_BLOCK, &mask, NULL);
-
-    if(err != 0) {
-        fprintf(stderr, "Last error -> %s: %s\n",
-                "Error in signal set initialization",  strerror(errno));
-        exit(EXIT_FAILURE);
-    }
 
     //  ignoring SIGPIPE signal
     if(signal(SIGPIPE, SIG_IGN) == SIG_ERR)
