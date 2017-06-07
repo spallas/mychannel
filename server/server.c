@@ -19,10 +19,10 @@ int last_free_ch = 1;
 // send to user when joining a new channel
 char ch_names[MAX_CHANNELS][CHNAME_SIZE];
 
-// users threads, limited by no. of channels and no. of users per channels
+// users threads, limited by n. of channels and n. of users per channel
 pthread_t user_threads[MAX_CHANNELS*MAX_CH_USERS];
 
-int add_user_mutex;    // correspond to semaphore array
+int add_user_mutex;    // keys of semaphore arrays
 int add_owner_mutex;
 int init_channel_mutex;
 int write_mutex;
@@ -130,6 +130,28 @@ int add_owner(user_t* owner, int ch_indx) {
     return 0;
 }
 
+int delete_channel(int ch_indx) {
+    msg_t* alert_msg = malloc(sizeof(msg_t));
+    sprintf(alert_msg->nickname, "%s", channels[ch_indx]->ch_owner);
+    sprintf(alert_msg->data, "%s",
+            "Sorry, I deleted this channel! Send :leave to leave the channel|");
+    if(channels[ch_indx] != NULL) {
+        enqueue(alert_msg, ch_indx);
+        sleep(1);
+        pthread_cancel(channels[ch_indx]->broadcast_thread);
+        mutex_lock(init_channel_mutex, 0);
+        free(channels[ch_indx]);
+        channels[ch_indx] = NULL;
+        ch_names[ch_indx][0] = '\0';
+        CLEAR_BIT(ch_bitmask, ch_indx);
+        last_free_ch = ch_indx;
+        num_channels--;
+        mutex_unlock(init_channel_mutex, 0);
+        LOGd("Channel deleted!");
+    }
+    return 0;
+}
+
 /**
  * Get a message from the current queue and send it to all users in a channel;
  * Function executed by thread ....
@@ -142,6 +164,7 @@ void* broadcast_routine(void* args) {
     // terminate thread as soon as requested
     while(1){
         msg_t* msg = dequeue(ch_indx);
+        int num_users = 0;
         for(int i=0; i<MAX_CH_USERS; i++){
             if(channels[ch_indx]->ch_users[i] == NULL) continue;
             if(strcmp(channels[ch_indx]->ch_users[i]->nickname, msg->nickname)==0)
@@ -157,8 +180,13 @@ void* broadcast_routine(void* args) {
                 remove_user(*(channels[ch_indx]->ch_users[i]), ch_indx);
             }
             free(buff);
+            num_users++;
         }
         free(msg);
+        if (num_users == 0) {
+            delete_channel(ch_indx);
+            pthread_exit(NULL);
+        }
     }
     pthread_exit(NULL);
 }
@@ -203,28 +231,6 @@ int init_channel(char* channel_name) {
     return i;
 }
 
-
-int delete_channel(int ch_indx) {
-    msg_t* alert_msg = malloc(sizeof(msg_t));
-    sprintf(alert_msg->nickname, "%s", channels[ch_indx]->ch_owner);
-    sprintf(alert_msg->data, "%s",
-            "Sorry, I deleted this channel! Send :leave to leave the channel|");
-    if(channels[ch_indx] != NULL) {
-        enqueue(alert_msg, ch_indx);
-        sleep(1);
-        pthread_cancel(channels[ch_indx]->broadcast_thread);
-        mutex_lock(init_channel_mutex, 0);
-        free(channels[ch_indx]);
-        channels[ch_indx] = NULL;
-        CLEAR_BIT(ch_bitmask, ch_indx);
-        last_free_ch = ch_indx;
-        num_channels--;
-        mutex_unlock(init_channel_mutex, 0);
-        LOGd("Channel deleted!");
-    }
-    return 0;
-}
-
 /**
  * Get the channel index in the array given his name
  * @param name: the name of the channel to find
@@ -257,7 +263,7 @@ int dialogue(user_t* user, int ch_indx, int is_owner) {
         if(strcmp(message->data, leave_msg) == 0  || ret == 0) {
             remove_user(*user, ch_indx);
             break;
-        } else if (strcmp(message->data, delete_msg) == 0 || ret == 0) {
+        } else if (strcmp(message->data, delete_msg) == 0) {
             // delete ch_indx channel only if this is the creator
             if(is_owner){
                 LOGd("About to delete a channel...");
@@ -285,6 +291,7 @@ void send_ch_names(int sockfd) {
     char *thats_all = "END";
     send_packet(sockfd, thats_all, 32);
 }
+
 /**
  * Thread function....
  */
@@ -397,7 +404,6 @@ void sigsegv_exit(int unused1, siginfo_t *info, void *unused2) {
     char msg[64];
     sprintf(msg, "segfault occurred (address is %x)\n", address);
     LOGe(msg);
-    smooth_exit(unused1, info, unused2);
 }
 
 
@@ -410,6 +416,7 @@ void handle_signal(int signal, void (*handler)(int, siginfo_t *, void *)) {
     /* Block other terminal-generated signals while handler runs. */
     sigaddset (&block_mask, SIGINT);
     sigaddset (&block_mask, SIGQUIT);
+    sigaddset (&block_mask, SIGTERM);
     act.sa_sigaction = handler;
     act.sa_flags = SA_SIGINFO;
     act.sa_mask  = block_mask;
@@ -425,32 +432,16 @@ int main(int argc, char const *argv[]) {
     printf("process: %d\n", getpid());
 
     int err = 0;
-    // mask is a global variable
-    err |= sigemptyset(&mask);
-    err |= sigfillset(&mask);
-    err |= sigdelset(&mask, SIGTERM);
-    err |= sigdelset(&mask, SIGINT);
-    err |= sigdelset(&mask, SIGQUIT);
-    err |= sigdelset(&mask, SIGHUP);
-    err |= sigdelset(&mask, SIGPIPE);
-    err |= sigdelset(&mask, SIGSEGV);
-    err |= pthread_sigmask(SIG_BLOCK, &mask, NULL);
 
-    if(err != 0) {
-        fprintf(stderr, "%s: %s\n",
-                "Error in signal set initialization",  strerror(errno));
-        exit(EXIT_FAILURE);
-    }
-
-    //  ignoring SIGPIPE signal
+    // ignoring SIGPIPE signal: the server will handle the error removing the
+    // user from the channel when the EPIPE error occurs in sending to a
+    // disconnected socket.
     if(signal(SIGPIPE, SIG_IGN) == SIG_ERR)
         ERROR_HELPER(-1, "Error ignoring SIGPIPE");
 
     handle_signal(SIGTERM,smooth_exit);
     handle_signal(SIGINT, smooth_exit);
     handle_signal(SIGQUIT,smooth_exit);
-    handle_signal(SIGHUP, smooth_exit);
-    handle_signal(SIGILL, smooth_exit);
     handle_signal(SIGSEGV,sigsegv_exit);
 
     // initialize semaphores
@@ -462,7 +453,7 @@ int main(int argc, char const *argv[]) {
     fill_sem    = sem_init(0, MAX_CHANNELS);
     empty_sem   = sem_init(QUEUE_SIZE, MAX_CHANNELS);
 
-    // the server listens on port 8000
+    // the server listens on port 8500
     unsigned short server_port = htons(SERVER_PORT);
 
     // initialize the listening socket, use default protocol
@@ -473,13 +464,12 @@ int main(int argc, char const *argv[]) {
                      SO_REUSEADDR, &enable, sizeof(int));
     ERROR_HELPER(err, "setsockopt(SO_REUSEADDR) failed");
 
-    // If the
     struct timeval tv;
     tv.tv_sec = 30;  /* 30 Secs Timeout */
     tv.tv_usec = 0;  // Not init'ing this can cause strange errors
     err = setsockopt(server_desc, SOL_SOCKET, SO_RCVTIMEO,
                      (const char*)&tv, sizeof(struct timeval));
-    ERROR_HELPER(err, "server.c -> setsockopt()");
+    ERROR_HELPER(err, "server.c -> setsockopt(timeout)");
 
     // initialize the server address with port defined above
     struct sockaddr_in server_addr = {0};
@@ -495,8 +485,8 @@ int main(int argc, char const *argv[]) {
     ERROR_HELPER(err, "listen()");
     // declare a variable to hold client address and its length
     // these will be filled by accept
-    struct sockaddr_in* client_addr = malloc(sizeof(struct sockaddr_in));
-    unsigned int client_addr_len = 0;
+    // struct sockaddr_in* client_addr = malloc(sizeof(struct sockaddr_in));
+    // unsigned int client_addr_len = 0;
 
     // declare variable for descriptor returned by accept
     int client_desc;
@@ -507,15 +497,13 @@ int main(int argc, char const *argv[]) {
     while(1) {
 
         LOGi("Accepting new connections...");
-        client_desc = accept(server_desc,
-                             (struct sockaddr*) client_addr,
-                             &client_addr_len);
+        client_desc = accept(server_desc, NULL, NULL);
         if(client_desc < 0) continue;
+
         err = pthread_create(&user_threads[ti], NULL, user_main,
                              (void*) client_desc);
         err|= pthread_detach(user_threads[ti]);
         PTHREAD_ERROR_HELPER(err, "Error creating threads in main loop");
-        client_addr = calloc(1,sizeof(struct sockaddr_in));
         ti++;
      }
 

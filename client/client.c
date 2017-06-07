@@ -30,8 +30,6 @@ int main(int argc, char const *argv[]) {
     err |= sigdelset(&mask, SIGTERM);
     err |= sigdelset(&mask, SIGINT);
     err |= sigdelset(&mask, SIGQUIT);
-    err |= sigdelset(&mask, SIGHUP);
-    err |= sigdelset(&mask, SIGPIPE);
     err |= sigdelset(&mask, SIGSEGV);
     err |= pthread_sigmask(SIG_BLOCK, &mask, NULL);
 
@@ -48,8 +46,6 @@ int main(int argc, char const *argv[]) {
     handle_signal(SIGTERM,smooth_exit);
     handle_signal(SIGINT, smooth_exit);
     handle_signal(SIGQUIT,smooth_exit);
-    handle_signal(SIGHUP, smooth_exit);
-    handle_signal(SIGILL, smooth_exit);
     handle_signal(SIGSEGV,sigsegv_exit);
 
     unsigned short server_port = htons(SERVER_PORT);
@@ -195,8 +191,16 @@ void* recv_msg(void* args) {
 void handle_signal(int signal, void (*handler)(int, siginfo_t *, void *)){
     // use sigaction
     struct sigaction act;
+    sigset_t block_mask;
+
+    sigemptyset (&block_mask);
+    /* Block other terminal-generated signals while handler runs. */
+    sigaddset (&block_mask, SIGINT);
+    sigaddset (&block_mask, SIGQUIT);
+    sigaddset (&block_mask, SIGTERM);
     act.sa_sigaction = handler;
     act.sa_flags = SA_SIGINFO;
+    act.sa_mask  = block_mask;
     int err = sigaction(signal, &act, NULL); // assign handler to signal
     ERROR_HELPER(err, "Error in handle_signal: sigaction()");
 }
@@ -231,14 +235,4 @@ void sigsegv_exit(int unused1, siginfo_t *info, void *unused2) {
     char msg[64];
     sprintf(msg, "segfault occurred (address is %x)\n", address);
     LOGe(msg);
-    pthread_cancel(threads[0]);
-    pthread_cancel(threads[1]);
-    pthread_join(threads[0], NULL);
-    pthread_join(threads[1], NULL);
-    char* leave_msg = LEAVE_COMMAND;
-    send_stream(sockfd, leave_msg, MSG_SIZE);
-    int err = close(sockfd);
-    ERROR_HELPER(err, "Could not close socket in client:sigsegv_exit");
-    write(1, "\nBye! C you soon!\n", 18);
-    exit(0);
 }
