@@ -1,2 +1,2 @@
 # mychannel
-mychannel is a multichannel chat tiem51 and I made as the Operating Systems project
+A multichannel chat in pure UNIX-C
